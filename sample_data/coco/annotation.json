@@ -1,0 +1,33 @@
+{
+  "images": [
+    {"id": 1, "file_name": "image.jpg", "width": 600, "height": 400}
+  ],
+  "annotations": [
+    {
+      "id": 1,
+      "image_id": 1,
+      "category_id": 1,
+      "bbox": [40.0, 50.0, 140.0, 100.0],
+      "segmentation": [[50, 50, 180, 60, 170, 150, 40, 140]]
+    },
+    {
+      "id": 2,
+      "image_id": 1,
+      "category_id": 2,
+      "bbox": [300.0, 100.0, 120.0, 80.0],
+      "segmentation": []
+    },
+    {
+      "id": 3,
+      "image_id": 1,
+      "category_id": 3,
+      "bbox": [420.0, 220.0, 100.0, 60.0],
+      "segmentation": []
+    }
+  ],
+  "categories": [
+    {"id": 1, "name": "scratch"},
+    {"id": 2, "name": "dent"},
+    {"id": 3, "name": "scuff"}
+  ]
+}

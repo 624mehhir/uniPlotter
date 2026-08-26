@@ -2,6 +2,4 @@ ARCHITECTURE.md
 CLAUDE.md
 PRD.md
 MILESTONES.md
-
-__pycache__/
-*.pyc
+annotation_plotter_v1_prompt.md

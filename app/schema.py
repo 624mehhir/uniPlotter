@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from typing import List, TypedDict, Union
 
 
@@ -10,3 +11,14 @@ class Annotation(TypedDict):
 
 
 AnnotationList = List[Annotation]
+
+
+@dataclass
+class ParseResult:
+    annotations: AnnotationList
+    warnings: List[str] = field(default_factory=list)
+    skipped_count: int = 0
+
+
+class ParseError(Exception):
+    """Raised when the file does not structurally match the selected format."""
