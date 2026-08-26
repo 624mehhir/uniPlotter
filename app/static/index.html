@@ -418,31 +418,60 @@
     gap: 1rem;
   }
 
-  .batch-status {
-    font-size: 0.8rem;
-    color: var(--text-faint);
-    margin-bottom: 1rem;
-  }
-
-  .results-list {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  .result-card {
+  .carousel {
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border);
   }
 
-  .result-card:first-child {
-    padding-top: 0;
-    border-top: none;
+  .carousel-toolbar {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .batch-status {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+  }
+
+  .carousel-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .carousel-nav .icon-btn {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .carousel-nav .icon-btn svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .carousel-nav .icon-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .position-indicator {
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    min-width: 4rem;
+    text-align: center;
+  }
+
+  .slide-card {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
 
   .card-header {
@@ -617,9 +646,23 @@
         Upload one or more images and an annotation file, then Plot to see results here.
       </div>
 
-      <div id="batchStatus" class="batch-status mono hidden"></div>
+      <div id="carousel" class="carousel hidden">
+        <div class="carousel-toolbar">
+          <div id="batchStatus" class="batch-status mono hidden"></div>
+          <div class="carousel-nav">
+            <button id="prevBtn" type="button" class="icon-btn" aria-label="Previous image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <span id="positionIndicator" class="position-indicator mono"></span>
+            <button id="nextBtn" type="button" class="icon-btn" aria-label="Next image">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+          <button id="downloadAllBtn" type="button" class="btn btn-secondary hidden">Download All (ZIP)</button>
+        </div>
 
-      <div id="resultsList" class="results-list hidden"></div>
+        <div id="slideCard" class="slide-card"></div>
+      </div>
     </section>
   </main>
 
@@ -661,7 +704,12 @@
   const submitBtn = document.getElementById('submitBtn');
   const outputEmpty = document.getElementById('outputEmpty');
   const batchStatus = document.getElementById('batchStatus');
-  const resultsList = document.getElementById('resultsList');
+  const carousel = document.getElementById('carousel');
+  const slideCard = document.getElementById('slideCard');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const positionIndicator = document.getElementById('positionIndicator');
+  const downloadAllBtn = document.getElementById('downloadAllBtn');
 
   function wireFileNameDisplay(inputId, labelId) {
     const input = document.getElementById(inputId);
@@ -707,24 +755,7 @@
   formatSelect.addEventListener('change', updateClassesVisibility);
   updateClassesVisibility();
 
-  function buildCardShell(filename) {
-    const card = document.createElement('div');
-    card.className = 'result-card';
-
-    const header = document.createElement('div');
-    header.className = 'card-header';
-    const name = document.createElement('span');
-    name.className = 'card-header-name mono';
-    name.textContent = filename;
-    header.appendChild(name);
-    card.appendChild(header);
-
-    return card;
-  }
-
-  function buildErrorCard(filename, message) {
-    const card = buildCardShell(filename);
-
+  function buildErrorBody(message) {
     const bar = document.createElement('div');
     bar.className = 'status-bar status-error';
     bar.setAttribute('role', 'alert');
@@ -736,12 +767,18 @@
       <div><strong>Error</strong><div class="card-error-text"></div></div>
     `;
     bar.querySelector('.card-error-text').textContent = message;
-    card.appendChild(bar);
-    return card;
+    return bar;
   }
 
-  function buildSuccessCard(filename, data) {
-    const card = buildCardShell(filename);
+  function buildPendingBody() {
+    const bar = document.createElement('div');
+    bar.className = 'output-empty';
+    bar.textContent = 'Plotting…';
+    return bar;
+  }
+
+  function buildSuccessBody(data) {
+    const frag = document.createDocumentFragment();
 
     if (data.warnings && data.warnings.length > 0) {
       const warn = document.createElement('div');
@@ -759,7 +796,7 @@
         li.textContent = w;
         ul.appendChild(li);
       });
-      card.appendChild(warn);
+      frag.appendChild(warn);
     }
 
     const dataUrl = `data:${data.media_type};base64,${data.image_base64}`;
@@ -802,30 +839,222 @@
     toolbar.appendChild(stats);
 
     result.appendChild(toolbar);
-    card.appendChild(result);
+    frag.appendChild(result);
 
-    return card;
+    return frag;
+  }
+
+  // ---- Carousel state ----
+
+  let slides = [];        // { filename, status: 'pending'|'success'|'error', data, message }
+  let currentIndex = 0;
+  let maxReachedIndex = -1;
+  let batchRunning = false;
+
+  function renderSlide() {
+    if (slides.length === 0) {
+      carousel.classList.add('hidden');
+      outputEmpty.classList.remove('hidden');
+      return;
+    }
+    outputEmpty.classList.add('hidden');
+    carousel.classList.remove('hidden');
+
+    const slide = slides[currentIndex];
+
+    slideCard.innerHTML = '';
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const name = document.createElement('span');
+    name.className = 'card-header-name mono';
+    name.textContent = slide.filename;
+    header.appendChild(name);
+    slideCard.appendChild(header);
+
+    if (slide.status === 'pending') {
+      slideCard.appendChild(buildPendingBody());
+    } else if (slide.status === 'error') {
+      slideCard.appendChild(buildErrorBody(slide.message));
+    } else {
+      slideCard.appendChild(buildSuccessBody(slide.data));
+    }
+
+    const multi = slides.length > 1;
+    prevBtn.classList.toggle('hidden', !multi);
+    nextBtn.classList.toggle('hidden', !multi);
+    positionIndicator.classList.toggle('hidden', !multi);
+    downloadAllBtn.classList.toggle('hidden', !multi);
+
+    if (multi) {
+      positionIndicator.textContent = `${currentIndex + 1} of ${slides.length}`;
+      prevBtn.disabled = currentIndex <= 0;
+      const upperBound = batchRunning ? maxReachedIndex : slides.length - 1;
+      nextBtn.disabled = currentIndex >= upperBound;
+      downloadAllBtn.disabled = batchRunning;
+    }
+  }
+
+  prevBtn.addEventListener('click', () => {
+    if (currentIndex > 0) {
+      currentIndex--;
+      renderSlide();
+    }
+  });
+
+  nextBtn.addEventListener('click', () => {
+    const upperBound = batchRunning ? maxReachedIndex : slides.length - 1;
+    if (currentIndex < upperBound) {
+      currentIndex++;
+      renderSlide();
+    }
+  });
+
+  // ---- ZIP encoding (STORE method, hand-written — no library/CDN) ----
+
+  function crc32(bytes) {
+    let crc = ~0;
+    for (let i = 0; i < bytes.length; i++) {
+      crc ^= bytes[i];
+      for (let j = 0; j < 8; j++) {
+        crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+      }
+    }
+    return (~crc) >>> 0;
+  }
+
+  function dosDateTime() {
+    const now = new Date();
+    const time = ((now.getHours() & 0x1f) << 11) | ((now.getMinutes() & 0x3f) << 5) | ((Math.floor(now.getSeconds() / 2)) & 0x1f);
+    const date = (((now.getFullYear() - 1980) & 0x7f) << 9) | (((now.getMonth() + 1) & 0xf) << 5) | (now.getDate() & 0x1f);
+    return { time, date };
+  }
+
+  function buildZip(entries) {
+    const encoder = new TextEncoder();
+    const { time, date } = dosDateTime();
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+
+    entries.forEach(({ name, data }) => {
+      const nameBytes = encoder.encode(name);
+      const crc = crc32(data);
+      const size = data.length;
+
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true);
+      local.setUint16(4, 20, true);
+      local.setUint16(6, 0, true);
+      local.setUint16(8, 0, true);
+      local.setUint16(10, time, true);
+      local.setUint16(12, date, true);
+      local.setUint32(14, crc, true);
+      local.setUint32(18, size, true);
+      local.setUint32(22, size, true);
+      local.setUint16(26, nameBytes.length, true);
+      local.setUint16(28, 0, true);
+
+      const localHeaderOffset = offset;
+      localParts.push(new Uint8Array(local.buffer), nameBytes, data);
+      offset += 30 + nameBytes.length + size;
+
+      const central = new DataView(new ArrayBuffer(46));
+      central.setUint32(0, 0x02014b50, true);
+      central.setUint16(4, 20, true);
+      central.setUint16(6, 20, true);
+      central.setUint16(8, 0, true);
+      central.setUint16(10, 0, true);
+      central.setUint16(12, time, true);
+      central.setUint16(14, date, true);
+      central.setUint32(16, crc, true);
+      central.setUint32(20, size, true);
+      central.setUint32(24, size, true);
+      central.setUint16(28, nameBytes.length, true);
+      central.setUint16(30, 0, true);
+      central.setUint16(32, 0, true);
+      central.setUint16(34, 0, true);
+      central.setUint16(36, 0, true);
+      central.setUint32(38, 0, true);
+      central.setUint32(42, localHeaderOffset, true);
+
+      centralParts.push(new Uint8Array(central.buffer), nameBytes);
+    });
+
+    const centralDirOffset = offset;
+    let centralDirSize = 0;
+    centralParts.forEach((p) => { centralDirSize += p.length; });
+
+    const eocd = new DataView(new ArrayBuffer(22));
+    eocd.setUint32(0, 0x06054b50, true);
+    eocd.setUint16(4, 0, true);
+    eocd.setUint16(6, 0, true);
+    eocd.setUint16(8, entries.length, true);
+    eocd.setUint16(10, entries.length, true);
+    eocd.setUint32(12, centralDirSize, true);
+    eocd.setUint32(16, centralDirOffset, true);
+    eocd.setUint16(20, 0, true);
+
+    return new Blob([...localParts, ...centralParts, new Uint8Array(eocd.buffer)], { type: 'application/zip' });
+  }
+
+  function base64ToBytes(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  downloadAllBtn.addEventListener('click', () => {
+    const successSlides = slides.filter((s) => s.status === 'success');
+    if (successSlides.length === 0) return;
+
+    const entries = successSlides.map((s) => ({
+      name: s.data.filename,
+      data: base64ToBytes(s.data.image_base64),
+    }));
+    const blob = buildZip(entries);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'uniplotter_batch.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ---- Submit / plotting loop ----
+
+  function naturalCompare(a, b) {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
   }
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
 
-    const images = Array.from(imageInput.files || []);
+    const images = Array.from(imageInput.files || []).sort((a, b) => naturalCompare(a.name, b.name));
     const annotationFile = document.getElementById('annotation').files[0];
     const format = formatSelect.value;
     const classesFile = format === 'yolo' && classesInput.files[0] ? classesInput.files[0] : null;
 
-    resultsList.innerHTML = '';
-    resultsList.classList.add('hidden');
-    outputEmpty.classList.add('hidden');
-    batchStatus.classList.remove('hidden');
+    slides = images.map((image) => ({ filename: image.name, status: 'pending', data: null, message: null }));
+    currentIndex = 0;
+    maxReachedIndex = -1;
+    batchRunning = true;
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Plotting…';
+    batchStatus.classList.remove('hidden');
+    renderSlide();
 
     for (let i = 0; i < images.length; i++) {
       const image = images[i];
+      maxReachedIndex = i;
+      currentIndex = i;
       batchStatus.textContent = images.length > 1 ? `Plotting ${i + 1} of ${images.length}…` : 'Plotting…';
+      renderSlide();
 
       const formData = new FormData();
       formData.append('image', image);
@@ -835,27 +1064,33 @@
         formData.append('classes', classesFile);
       }
 
-      let card;
       try {
         const response = await fetch('/plot', {
           method: 'POST',
           body: formData,
         });
         const data = await response.json();
-        card = response.ok
-          ? buildSuccessCard(image.name, data)
-          : buildErrorCard(image.name, data.detail || 'Request failed.');
+        if (response.ok) {
+          slides[i].status = 'success';
+          slides[i].data = data;
+        } else {
+          slides[i].status = 'error';
+          slides[i].message = data.detail || 'Request failed.';
+        }
       } catch (err) {
-        card = buildErrorCard(image.name, 'Request failed: ' + err.message);
+        slides[i].status = 'error';
+        slides[i].message = 'Request failed: ' + err.message;
       }
 
-      resultsList.appendChild(card);
-      resultsList.classList.remove('hidden');
+      currentIndex = i;
+      renderSlide();
     }
 
+    batchRunning = false;
     batchStatus.classList.add('hidden');
     submitBtn.disabled = false;
     submitBtn.textContent = 'Plot';
+    renderSlide();
   });
 </script>
 </body>
