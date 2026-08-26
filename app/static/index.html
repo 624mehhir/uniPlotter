@@ -2,172 +2,762 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>UniPlotter</title>
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem('uniplotter-theme');
+      if (stored === 'light' || stored === 'dark') {
+        document.documentElement.setAttribute('data-theme', stored);
+      }
+    } catch (e) {}
+  })();
+</script>
 <style>
+  :root {
+    --bg: #f3f4f7;
+    --grid-line: rgba(20, 24, 32, 0.045);
+    --surface: #ffffff;
+    --surface-2: #e9ebf0;
+    --border: #d7dae1;
+    --border-strong: #b9bec9;
+    --text: #1c1f26;
+    --text-dim: #5c6270;
+    --text-faint: #868c99;
+    --accent: #0e7c8b;
+    --accent-strong: #0b6472;
+    --accent-on: #ffffff;
+    --warn-bg: #fdf3dc;
+    --warn-border: #e3ae49;
+    --warn-text: #7a5100;
+    --error-bg: #fbe9e9;
+    --error-border: #dd8384;
+    --error-text: #8f1d1d;
+    --shadow: 0 1px 2px rgba(20, 24, 32, 0.06), 0 8px 24px rgba(20, 24, 32, 0.05);
+    --radius: 8px;
+    --radius-sm: 5px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13151a;
+      --grid-line: rgba(255, 255, 255, 0.035);
+      --surface: #1a1d24;
+      --surface-2: #20242d;
+      --border: #2c313c;
+      --border-strong: #3b4250;
+      --text: #e8eaf0;
+      --text-dim: #9aa0af;
+      --text-faint: #6b7181;
+      --accent: #3fd0de;
+      --accent-strong: #62dbe6;
+      --accent-on: #062226;
+      --warn-bg: #2a2210;
+      --warn-border: #8a6a1f;
+      --warn-text: #f0c15f;
+      --error-bg: #2b1414;
+      --error-border: #8a3a3a;
+      --error-text: #f3999a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #13151a;
+    --grid-line: rgba(255, 255, 255, 0.035);
+    --surface: #1a1d24;
+    --surface-2: #20242d;
+    --border: #2c313c;
+    --border-strong: #3b4250;
+    --text: #e8eaf0;
+    --text-dim: #9aa0af;
+    --text-faint: #6b7181;
+    --accent: #3fd0de;
+    --accent-strong: #62dbe6;
+    --accent-on: #062226;
+    --warn-bg: #2a2210;
+    --warn-border: #8a6a1f;
+    --warn-text: #f0c15f;
+    --error-bg: #2b1414;
+    --error-border: #8a3a3a;
+    --error-text: #f3999a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  .hidden { display: none !important; }
+
+  html, body {
+    background: var(--bg);
+  }
+
   body {
-    font-family: system-ui, sans-serif;
-    max-width: 900px;
-    margin: 2rem auto;
-    padding: 0 1rem;
-    color: #222;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+    margin: 0;
+    padding: 0 1.25rem 3rem;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-attachment: fixed;
   }
-  h1 {
-    font-size: 1.4rem;
+
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   }
-  form {
-    display: grid;
-    gap: 0.75rem;
-    border: 1px solid #ccc;
-    padding: 1rem;
-    border-radius: 6px;
+
+  a { color: inherit; }
+
+  .page {
+    max-width: 1080px;
+    margin: 0 auto;
   }
-  label {
-    font-weight: 600;
-    display: block;
-    margin-bottom: 0.25rem;
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.75rem 0 1.25rem;
   }
-  #classesField.hidden {
-    display: none;
+
+  .brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
   }
-  button {
-    padding: 0.5rem 1rem;
-    font-size: 1rem;
+
+  .brand-mark {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .brand-sub {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    letter-spacing: 0.02em;
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
     cursor: pointer;
   }
-  #warnings {
-    color: #8a5a00;
-    background: #fff8e6;
-    border: 1px solid #f0d68a;
-    padding: 0.75rem 1rem;
-    border-radius: 6px;
-    margin-top: 1rem;
+
+  .icon-btn:hover {
+    border-color: var(--border-strong);
   }
-  #error {
-    color: #a30000;
-    background: #fdecec;
-    border: 1px solid #f0a8a8;
-    padding: 0.75rem 1rem;
-    border-radius: 6px;
-    margin-top: 1rem;
+
+  .icon-btn svg {
+    width: 1.2rem;
+    height: 1.2rem;
   }
-  #result img {
+
+  .icon-moon { display: none; }
+
+  :root[data-theme="dark"] .icon-sun { display: none; }
+  :root[data-theme="dark"] .icon-moon { display: block; }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .icon-sun { display: none; }
+    :root:not([data-theme="light"]) .icon-moon { display: block; }
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  @media (max-width: 860px) {
+    .layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .panel {
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.25rem;
+  }
+
+  .panel-title {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 0 0 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  form {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .field {
+    min-width: 0;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+  }
+
+  .file-control {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    padding: 0.35rem;
+  }
+
+  .file-control:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .file-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .file-button {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-radius: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    cursor: pointer;
+    color: var(--text);
+  }
+
+  .file-button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .file-name {
+    min-width: 0;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-name.has-file {
+    color: var(--text-dim);
+  }
+
+  select {
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--surface-2);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%235c6270' d='M4 6l4 4 4-4z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    background-size: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 2rem 0.55rem 0.7rem;
+    font-size: 0.88rem;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  select:hover { border-color: var(--border-strong); }
+
+  input:focus-visible,
+  select:focus-visible,
+  button:focus-visible,
+  a:focus-visible,
+  .file-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 0.7rem 1rem;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-on);
+  }
+
+  .btn-primary:hover { background: var(--accent-strong); }
+
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .btn-secondary {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: var(--border-strong);
+    text-decoration: none;
+  }
+
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  .output-panel {
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .output-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    padding: 3rem 1rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+  }
+
+  .status-bar {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    border-radius: var(--radius-sm);
+    border: 1px solid;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  .status-bar-icon {
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.1rem;
+  }
+
+  .status-error {
+    background: var(--error-bg);
+    border-color: var(--error-border);
+    color: var(--error-text);
+  }
+
+  .status-warning {
+    background: var(--warn-bg);
+    border-color: var(--warn-border);
+    color: var(--warn-text);
+  }
+
+  .status-bar strong {
+    display: block;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+  }
+
+  .status-bar ul {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+
+  .status-bar li + li { margin-top: 0.2rem; }
+
+  .result {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .frame {
+    position: relative;
+    display: inline-block;
     max-width: 100%;
-    margin-top: 1rem;
-    border: 1px solid #ccc;
+    margin: 0.35rem auto 0.1rem;
   }
-  #meta {
-    margin-top: 0.5rem;
-    font-size: 0.9rem;
-    color: #555;
+
+  .frame img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 2px;
+  }
+
+  .corner {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 0 solid var(--accent);
+    pointer-events: none;
+  }
+
+  .corner-tl { top: -7px; left: -7px; border-top-width: 2px; border-left-width: 2px; }
+  .corner-tr { top: -7px; right: -7px; border-top-width: 2px; border-right-width: 2px; }
+  .corner-bl { bottom: -7px; left: -7px; border-bottom-width: 2px; border-left-width: 2px; }
+  .corner-br { bottom: -7px; right: -7px; border-bottom-width: 2px; border-right-width: 2px; }
+
+  .result-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.9rem;
+  }
+
+  .stats {
+    display: flex;
+    gap: 1.25rem;
+    margin: 0;
+  }
+
+  .stats div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .stats dt {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  .stats dd {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  footer {
+    margin-top: 2rem;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .icon-btn, .file-button, .btn, select, .file-control {
+      transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+    }
   }
 </style>
 </head>
 <body>
-  <h1>UniPlotter — Universal Annotation Plotter</h1>
-  <form id="plotForm">
-    <div>
-      <label for="image">Image file</label>
-      <input type="file" id="image" name="image" accept="image/*" required>
+<div class="page">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">UNIPLOTTER</span>
+      <span class="brand-sub">Annotation verification instrument</span>
     </div>
-    <div>
-      <label for="format">Format</label>
-      <select id="format" name="format" required>
-        <option value="coco">COCO</option>
-        <option value="yolo">YOLO</option>
-        <option value="voc">Pascal VOC</option>
-        <option value="labelme">LabelMe</option>
-        <option value="labelstudio">Label Studio</option>
-        <option value="cvat">CVAT</option>
-        <option value="lekhana">Lekhana</option>
-      </select>
-    </div>
-    <div>
-      <label for="annotation">Annotation file</label>
-      <input type="file" id="annotation" name="annotation" required>
-    </div>
-    <div id="classesField" class="hidden">
-      <label for="classes">Classes file (classes.txt)</label>
-      <input type="file" id="classes" name="classes">
-    </div>
-    <button type="submit">Plot</button>
-  </form>
+    <button id="themeToggle" class="icon-btn" type="button" aria-label="Toggle color theme" aria-pressed="false">
+      <svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+      </svg>
+      <svg class="icon icon-moon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M20.4 14.7A8.5 8.5 0 019.3 3.6a.6.6 0 00-.7-.8A9.5 9.5 0 1021.2 15.4a.6.6 0 00-.8-.7z"></path>
+      </svg>
+    </button>
+  </header>
 
-  <div id="error" class="hidden"></div>
-  <div id="warnings" class="hidden"></div>
-  <div id="result"></div>
+  <main class="layout">
+    <section class="panel input-panel">
+      <h2 class="panel-title">Input</h2>
+      <form id="plotForm">
+        <div class="field">
+          <label class="field-label" for="image">Image file</label>
+          <div class="file-control">
+            <input type="file" id="image" name="image" accept="image/*" required class="file-input">
+            <label for="image" class="file-button">Browse</label>
+            <span class="file-name" id="imageFileName">No file selected</span>
+          </div>
+        </div>
 
-  <script>
-    const formatSelect = document.getElementById('format');
-    const classesField = document.getElementById('classesField');
-    const classesInput = document.getElementById('classes');
-    const form = document.getElementById('plotForm');
-    const errorDiv = document.getElementById('error');
-    const warningsDiv = document.getElementById('warnings');
-    const resultDiv = document.getElementById('result');
+        <div class="field">
+          <label class="field-label" for="format">Format</label>
+          <select id="format" name="format" required>
+            <option value="coco">COCO</option>
+            <option value="yolo">YOLO</option>
+            <option value="voc">Pascal VOC</option>
+            <option value="labelme">LabelMe</option>
+            <option value="labelstudio">Label Studio</option>
+            <option value="cvat">CVAT</option>
+            <option value="lekhana">Lekhana</option>
+          </select>
+        </div>
 
-    function updateClassesVisibility() {
-      if (formatSelect.value === 'yolo') {
-        classesField.classList.remove('hidden');
-      } else {
-        classesField.classList.add('hidden');
-        classesInput.value = '';
-      }
+        <div class="field">
+          <label class="field-label" for="annotation">Annotation file</label>
+          <div class="file-control">
+            <input type="file" id="annotation" name="annotation" required class="file-input">
+            <label for="annotation" class="file-button">Browse</label>
+            <span class="file-name" id="annotationFileName">No file selected</span>
+          </div>
+        </div>
+
+        <div id="classesField" class="field hidden">
+          <label class="field-label" for="classes">Classes file (classes.txt)</label>
+          <div class="file-control">
+            <input type="file" id="classes" name="classes" class="file-input">
+            <label for="classes" class="file-button">Browse</label>
+            <span class="file-name" id="classesFileName">No file selected</span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="submitBtn">Plot</button>
+      </form>
+    </section>
+
+    <section class="panel output-panel" aria-live="polite">
+      <h2 class="panel-title">Output</h2>
+
+      <div id="outputEmpty" class="output-empty">
+        Upload an image and annotation file, then Plot to see the result here.
+      </div>
+
+      <div id="error" class="status-bar status-error hidden" role="alert">
+        <svg class="status-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M12 8v5M12 16h.01"></path>
+        </svg>
+        <div>
+          <strong>Error</strong>
+          <div id="errorText"></div>
+        </div>
+      </div>
+
+      <div id="warnings" class="status-bar status-warning hidden">
+        <svg class="status-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l10 18H2z"></path>
+          <path d="M12 10v4M12 17h.01"></path>
+        </svg>
+        <div>
+          <strong>Warnings</strong>
+          <ul id="warningsList"></ul>
+        </div>
+      </div>
+
+      <div id="result" class="result hidden">
+        <div class="frame">
+          <span class="corner corner-tl"></span>
+          <span class="corner corner-tr"></span>
+          <span class="corner corner-bl"></span>
+          <span class="corner corner-br"></span>
+          <img id="resultImage" alt="Plotted annotations">
+        </div>
+        <div class="result-toolbar">
+          <a id="downloadLink" class="btn btn-secondary" download>Download PNG</a>
+          <dl class="stats mono">
+            <div>
+              <dt>Plotted</dt>
+              <dd id="statPlotted">0</dd>
+            </div>
+            <div>
+              <dt>Skipped</dt>
+              <dd id="statSkipped">0</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>UniPlotter &mdash; stateless annotation verification, 7 formats</footer>
+</div>
+
+<script>
+  (function themeToggleInit() {
+    const root = document.documentElement;
+    const toggle = document.getElementById('themeToggle');
+
+    function currentTheme() {
+      const attr = root.getAttribute('data-theme');
+      if (attr) return attr;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    formatSelect.addEventListener('change', updateClassesVisibility);
-    updateClassesVisibility();
 
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      errorDiv.classList.add('hidden');
-      errorDiv.textContent = '';
-      warningsDiv.classList.add('hidden');
-      warningsDiv.innerHTML = '';
-      resultDiv.innerHTML = '';
+    function syncToggleState() {
+      toggle.setAttribute('aria-pressed', currentTheme() === 'dark' ? 'true' : 'false');
+    }
 
-      const formData = new FormData();
-      formData.append('image', document.getElementById('image').files[0]);
-      formData.append('annotation', document.getElementById('annotation').files[0]);
-      formData.append('format', formatSelect.value);
-      if (formatSelect.value === 'yolo' && classesInput.files[0]) {
-        formData.append('classes', classesInput.files[0]);
-      }
-
+    toggle.addEventListener('click', () => {
+      const next = currentTheme() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
       try {
-        const response = await fetch('/plot', {
-          method: 'POST',
-          body: formData,
-        });
-        const data = await response.json();
+        localStorage.setItem('uniplotter-theme', next);
+      } catch (e) {}
+      syncToggleState();
+    });
 
-        if (!response.ok) {
-          errorDiv.textContent = data.detail || 'Request failed.';
-          errorDiv.classList.remove('hidden');
-          return;
-        }
+    syncToggleState();
+  })();
 
-        if (data.warnings && data.warnings.length > 0) {
-          warningsDiv.innerHTML = '<strong>Warnings:</strong><ul>' +
-            data.warnings.map(w => `<li>${w}</li>`).join('') +
-            '</ul>';
-          warningsDiv.classList.remove('hidden');
-        }
+  const formatSelect = document.getElementById('format');
+  const classesField = document.getElementById('classesField');
+  const classesInput = document.getElementById('classes');
+  const form = document.getElementById('plotForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const errorDiv = document.getElementById('error');
+  const errorText = document.getElementById('errorText');
+  const warningsDiv = document.getElementById('warnings');
+  const warningsList = document.getElementById('warningsList');
+  const outputEmpty = document.getElementById('outputEmpty');
+  const resultDiv = document.getElementById('result');
+  const resultImage = document.getElementById('resultImage');
+  const downloadLink = document.getElementById('downloadLink');
+  const statPlotted = document.getElementById('statPlotted');
+  const statSkipped = document.getElementById('statSkipped');
 
-        const img = document.createElement('img');
-        img.src = `data:${data.media_type};base64,${data.image_base64}`;
-        img.alt = data.filename;
-
-        const meta = document.createElement('div');
-        meta.id = 'meta';
-        meta.textContent =
-          `${data.annotation_count} annotation(s) plotted, ${data.skipped_count} skipped.`;
-
-        resultDiv.appendChild(img);
-        resultDiv.appendChild(meta);
-      } catch (err) {
-        errorDiv.textContent = 'Request failed: ' + err.message;
-        errorDiv.classList.remove('hidden');
+  function wireFileNameDisplay(inputId, labelId) {
+    const input = document.getElementById(inputId);
+    const label = document.getElementById(labelId);
+    input.addEventListener('change', () => {
+      if (input.files && input.files[0]) {
+        label.textContent = input.files[0].name;
+        label.classList.add('has-file');
+      } else {
+        label.textContent = 'No file selected';
+        label.classList.remove('has-file');
       }
     });
-  </script>
+  }
+  wireFileNameDisplay('image', 'imageFileName');
+  wireFileNameDisplay('annotation', 'annotationFileName');
+  wireFileNameDisplay('classes', 'classesFileName');
+
+  function updateClassesVisibility() {
+    if (formatSelect.value === 'yolo') {
+      classesField.classList.remove('hidden');
+    } else {
+      classesField.classList.add('hidden');
+      classesInput.value = '';
+      document.getElementById('classesFileName').textContent = 'No file selected';
+      document.getElementById('classesFileName').classList.remove('has-file');
+    }
+  }
+  formatSelect.addEventListener('change', updateClassesVisibility);
+  updateClassesVisibility();
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    errorDiv.classList.add('hidden');
+    errorText.textContent = '';
+    warningsDiv.classList.add('hidden');
+    warningsList.innerHTML = '';
+    resultDiv.classList.add('hidden');
+    outputEmpty.classList.add('hidden');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Plotting…';
+
+    const formData = new FormData();
+    formData.append('image', document.getElementById('image').files[0]);
+    formData.append('annotation', document.getElementById('annotation').files[0]);
+    formData.append('format', formatSelect.value);
+    if (formatSelect.value === 'yolo' && classesInput.files[0]) {
+      formData.append('classes', classesInput.files[0]);
+    }
+
+    try {
+      const response = await fetch('/plot', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        errorText.textContent = data.detail || 'Request failed.';
+        errorDiv.classList.remove('hidden');
+        outputEmpty.classList.remove('hidden');
+        return;
+      }
+
+      if (data.warnings && data.warnings.length > 0) {
+        warningsList.innerHTML = data.warnings.map(w => `<li>${w}</li>`).join('');
+        warningsDiv.classList.remove('hidden');
+      }
+
+      const dataUrl = `data:${data.media_type};base64,${data.image_base64}`;
+      resultImage.src = dataUrl;
+      resultImage.alt = data.filename;
+
+      downloadLink.href = dataUrl;
+      downloadLink.download = data.filename;
+
+      statPlotted.textContent = data.annotation_count;
+      statSkipped.textContent = data.skipped_count;
+
+      resultDiv.classList.remove('hidden');
+    } catch (err) {
+      errorText.textContent = 'Request failed: ' + err.message;
+      errorDiv.classList.remove('hidden');
+      outputEmpty.classList.remove('hidden');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Plot';
+    }
+  });
+</script>
 </body>
 </html>
