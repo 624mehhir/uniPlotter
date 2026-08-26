@@ -33,23 +33,35 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
         recorded_width = size_elem.findtext("width")
         recorded_height = size_elem.findtext("height")
         if recorded_width is not None and recorded_height is not None:
-            recorded_width, recorded_height = int(recorded_width), int(recorded_height)
-            if (recorded_width, recorded_height) != (image_width, image_height):
+            try:
+                recorded_width, recorded_height = int(recorded_width), int(recorded_height)
+            except ValueError:
                 warnings.append(
-                    f"VOC records {recorded_width}x{recorded_height} but the "
-                    f"uploaded image is {image_width}x{image_height}."
+                    "VOC <size> width/height could not be parsed as numbers; "
+                    "skipping the dimension check."
                 )
+            else:
+                if (recorded_width, recorded_height) != (image_width, image_height):
+                    warnings.append(
+                        f"VOC records {recorded_width}x{recorded_height} but the "
+                        f"uploaded image is {image_width}x{image_height}."
+                    )
 
     annotations = []
+    skipped_count = 0
     for obj in root.findall("object"):
         bndbox = obj.find("bndbox")
         if bndbox is None:
             continue
         label = obj.findtext("name") or "unknown"
-        xmin = float(bndbox.findtext("xmin"))
-        ymin = float(bndbox.findtext("ymin"))
-        xmax = float(bndbox.findtext("xmax"))
-        ymax = float(bndbox.findtext("ymax"))
+        try:
+            xmin = float(bndbox.findtext("xmin"))
+            ymin = float(bndbox.findtext("ymin"))
+            xmax = float(bndbox.findtext("xmax"))
+            ymax = float(bndbox.findtext("ymax"))
+        except (TypeError, ValueError):
+            skipped_count += 1
+            continue
         annotations.append(
             {
                 "label": label,
@@ -58,4 +70,12 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
             }
         )
 
-    return ParseResult(annotations=annotations, warnings=warnings, skipped_count=0)
+    if skipped_count:
+        warnings.append(
+            f"Skipped {skipped_count} object(s) with missing/invalid bndbox "
+            f"coordinates."
+        )
+
+    return ParseResult(
+        annotations=annotations, warnings=warnings, skipped_count=skipped_count
+    )

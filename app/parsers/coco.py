@@ -32,7 +32,7 @@ def _select_image(images, uploaded_filename):
 def parse(annotation_bytes, image_width, image_height, image_filename):
     try:
         data = json.loads(annotation_bytes)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         raise ParseError("This doesn't look like valid JSON.")
 
     if not isinstance(data, dict) or not all(
@@ -69,6 +69,7 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
     skipped_count = 0
     unknown_category_ids = set()
     unsupported_shape_types = set()
+    no_geometry_count = 0
 
     for ann in data["annotations"]:
         if ann.get("image_id") != selected_image_id:
@@ -101,6 +102,9 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
                 annotations.append(
                     {"label": label, "shape_type": "bbox", "points": list(bbox)}
                 )
+            else:
+                no_geometry_count += 1
+                skipped_count += 1
 
     if unknown_category_ids:
         warnings.append(
@@ -110,8 +114,14 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
 
     if unsupported_shape_types:
         warnings.append(
-            f"Skipped {skipped_count} unsupported shape(s): "
+            f"Skipped {skipped_count - no_geometry_count} unsupported shape(s): "
             f"{', '.join(sorted(unsupported_shape_types))}."
+        )
+
+    if no_geometry_count:
+        warnings.append(
+            f"Skipped {no_geometry_count} annotation(s) with no usable geometry "
+            f"(no segmentation and a missing/invalid bbox)."
         )
 
     return ParseResult(

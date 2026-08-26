@@ -67,18 +67,27 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
     skipped_count = 0
     unsupported_shape_types = set()
     rotated_count = 0
+    malformed_count = 0
 
     for child in selected_image:
         label = child.get("label", "unknown")
         rotation = child.get("rotation")
-        if rotation and float(rotation) != 0:
-            rotated_count += 1
+        try:
+            if rotation and float(rotation) != 0:
+                rotated_count += 1
+        except ValueError:
+            pass
 
         if child.tag == "box":
-            xtl = float(child.get("xtl"))
-            ytl = float(child.get("ytl"))
-            xbr = float(child.get("xbr"))
-            ybr = float(child.get("ybr"))
+            try:
+                xtl = float(child.get("xtl"))
+                ytl = float(child.get("ytl"))
+                xbr = float(child.get("xbr"))
+                ybr = float(child.get("ybr"))
+            except (TypeError, ValueError):
+                malformed_count += 1
+                skipped_count += 1
+                continue
             annotations.append(
                 {
                     "label": label,
@@ -88,11 +97,18 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
             )
         elif child.tag == "polygon":
             points_str = child.get("points", "")
-            points = [
-                [float(p) for p in pair.split(",")]
-                for pair in points_str.split(";")
-                if pair
-            ]
+            try:
+                points = [
+                    [float(p) for p in pair.split(",")]
+                    for pair in points_str.split(";")
+                    if pair
+                ]
+                if not points or any(len(p) != 2 for p in points):
+                    raise ValueError("polygon points must be x,y pairs")
+            except ValueError:
+                malformed_count += 1
+                skipped_count += 1
+                continue
             annotations.append(
                 {"label": label, "shape_type": "polygon", "points": points}
             )
@@ -102,8 +118,14 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
 
     if unsupported_shape_types:
         warnings.append(
-            f"Skipped {skipped_count} unsupported shape(s): "
+            f"Skipped {skipped_count - malformed_count} unsupported shape(s): "
             f"{', '.join(sorted(unsupported_shape_types))}."
+        )
+
+    if malformed_count:
+        warnings.append(
+            f"Skipped {malformed_count} shape(s) with missing/invalid "
+            f"coordinates."
         )
 
     if rotated_count:

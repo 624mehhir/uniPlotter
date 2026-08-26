@@ -2,7 +2,10 @@ from app.schema import ParseError, ParseResult
 
 
 def parse(annotation_bytes, image_width, image_height, image_filename, classes_bytes):
-    classes_text = classes_bytes.decode("utf-8")
+    try:
+        classes_text = classes_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ParseError("classes.txt is not valid UTF-8 text.")
     classes = [line.rstrip("\r") for line in classes_text.split("\n")]
     classes = [line for line in classes if line.strip() != ""]
 
@@ -10,7 +13,10 @@ def parse(annotation_bytes, image_width, image_height, image_filename, classes_b
     annotations = []
     unknown_class_ids = set()
 
-    text = annotation_bytes.decode("utf-8")
+    try:
+        text = annotation_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ParseError("The YOLO annotation file is not valid UTF-8 text.")
     for line_number, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.strip()
         if not line:
@@ -36,13 +42,19 @@ def parse(annotation_bytes, image_width, image_height, image_filename, classes_b
             )
 
         class_id_token, x_center, y_center, width, height = tokens
-        class_id = int(class_id_token)
-        x_center, y_center, width, height = (
-            float(x_center),
-            float(y_center),
-            float(width),
-            float(height),
-        )
+        try:
+            class_id = int(class_id_token)
+            x_center, y_center, width, height = (
+                float(x_center),
+                float(y_center),
+                float(width),
+                float(height),
+            )
+        except ValueError:
+            raise ParseError(
+                f"Line {line_number} has non-numeric value(s); expected "
+                "class_id x_center y_center width height, all numbers."
+            )
 
         if 0 <= class_id < len(classes):
             label = classes[class_id]

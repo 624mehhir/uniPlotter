@@ -38,7 +38,7 @@ def _select_task(tasks, uploaded_filename):
 def parse(annotation_bytes, image_width, image_height, image_filename):
     try:
         data = json.loads(annotation_bytes)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         raise ParseError("This doesn't look like valid JSON.")
 
     if not isinstance(data, list) or not data:
@@ -81,6 +81,7 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
     skipped_count = 0
     unsupported_types = set()
     rotated_count = 0
+    malformed_count = 0
 
     for item in results:
         item_type = item.get("type")
@@ -94,20 +95,32 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
         if item_type == "polygonlabels":
             label_list = value.get("polygonlabels") or []
             label = label_list[0] if label_list else "unknown"
-            points = [
-                [(x / 100) * orig_w, (y / 100) * orig_h]
-                for x, y in value.get("points", [])
-            ]
+            try:
+                points = [
+                    [(x / 100) * orig_w, (y / 100) * orig_h]
+                    for x, y in value.get("points", [])
+                ]
+                if not points:
+                    raise ValueError("polygon has no points")
+            except (TypeError, ValueError):
+                malformed_count += 1
+                skipped_count += 1
+                continue
             annotations.append(
                 {"label": label, "shape_type": "polygon", "points": points}
             )
         elif item_type == "rectanglelabels":
             label_list = value.get("rectanglelabels") or []
             label = label_list[0] if label_list else "unknown"
-            x = (value.get("x", 0) / 100) * orig_w
-            y = (value.get("y", 0) / 100) * orig_h
-            width = (value.get("width", 0) / 100) * orig_w
-            height = (value.get("height", 0) / 100) * orig_h
+            try:
+                x = ((value.get("x") or 0) / 100) * orig_w
+                y = ((value.get("y") or 0) / 100) * orig_h
+                width = ((value.get("width") or 0) / 100) * orig_w
+                height = ((value.get("height") or 0) / 100) * orig_h
+            except TypeError:
+                malformed_count += 1
+                skipped_count += 1
+                continue
             annotations.append(
                 {"label": label, "shape_type": "bbox", "points": [x, y, width, height]}
             )
@@ -117,8 +130,14 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
 
     if unsupported_types:
         warnings.append(
-            f"Skipped {skipped_count} unsupported shape(s): "
+            f"Skipped {skipped_count - malformed_count} unsupported shape(s): "
             f"{', '.join(sorted(str(t) for t in unsupported_types))}."
+        )
+
+    if malformed_count:
+        warnings.append(
+            f"Skipped {malformed_count} shape(s) with missing/invalid "
+            f"coordinates."
         )
 
     if rotated_count:

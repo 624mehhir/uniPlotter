@@ -7,7 +7,7 @@ from app.schema import ParseError, ParseResult
 def parse(annotation_bytes, image_width, image_height, image_filename):
     try:
         data = json.loads(annotation_bytes)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         raise ParseError("This doesn't look like valid JSON.")
 
     if not isinstance(data, dict) or "shapes" not in data:
@@ -43,6 +43,7 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
     annotations = []
     skipped_count = 0
     unsupported_shape_types = set()
+    malformed_count = 0
 
     for shape in data["shapes"]:
         label = shape.get("label") or "unknown"
@@ -50,15 +51,28 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
         points = shape.get("points", [])
 
         if shape_type == "polygon":
+            try:
+                polygon_points = [[x, y] for x, y in points]
+                if not polygon_points:
+                    raise ValueError("polygon has no points")
+            except (TypeError, ValueError):
+                malformed_count += 1
+                skipped_count += 1
+                continue
             annotations.append(
                 {
                     "label": label,
                     "shape_type": "polygon",
-                    "points": [[x, y] for x, y in points],
+                    "points": polygon_points,
                 }
             )
         elif shape_type == "rectangle":
-            (x1, y1), (x2, y2) = points[0], points[1]
+            try:
+                (x1, y1), (x2, y2) = points[0], points[1]
+            except (IndexError, TypeError, ValueError):
+                malformed_count += 1
+                skipped_count += 1
+                continue
             x_min, y_min = min(x1, x2), min(y1, y2)
             width, height = abs(x2 - x1), abs(y2 - y1)
             annotations.append(
@@ -74,8 +88,13 @@ def parse(annotation_bytes, image_width, image_height, image_filename):
 
     if unsupported_shape_types:
         warnings.append(
-            f"Skipped {skipped_count} unsupported shape(s): "
+            f"Skipped {skipped_count - malformed_count} unsupported shape(s): "
             f"{', '.join(sorted(str(t) for t in unsupported_shape_types))}."
+        )
+
+    if malformed_count:
+        warnings.append(
+            f"Skipped {malformed_count} shape(s) with missing/invalid points."
         )
 
     return ParseResult(
