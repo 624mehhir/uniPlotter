@@ -418,6 +418,48 @@
     gap: 1rem;
   }
 
+  .batch-status {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    margin-bottom: 1rem;
+  }
+
+  .results-list {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .result-card {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .result-card:first-child {
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .card-header {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .card-header-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
   .frame {
     position: relative;
     display: inline-block;
@@ -525,9 +567,9 @@
       <h2 class="panel-title">Input</h2>
       <form id="plotForm">
         <div class="field">
-          <label class="field-label" for="image">Image file</label>
+          <label class="field-label" for="image">Image file(s)</label>
           <div class="file-control">
-            <input type="file" id="image" name="image" accept="image/*" required class="file-input">
+            <input type="file" id="image" name="image" accept="image/*" required multiple class="file-input">
             <label for="image" class="file-button">Browse</label>
             <span class="file-name" id="imageFileName">No file selected</span>
           </div>
@@ -572,53 +614,12 @@
       <h2 class="panel-title">Output</h2>
 
       <div id="outputEmpty" class="output-empty">
-        Upload an image and annotation file, then Plot to see the result here.
+        Upload one or more images and an annotation file, then Plot to see results here.
       </div>
 
-      <div id="error" class="status-bar status-error hidden" role="alert">
-        <svg class="status-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9"></circle>
-          <path d="M12 8v5M12 16h.01"></path>
-        </svg>
-        <div>
-          <strong>Error</strong>
-          <div id="errorText"></div>
-        </div>
-      </div>
+      <div id="batchStatus" class="batch-status mono hidden"></div>
 
-      <div id="warnings" class="status-bar status-warning hidden">
-        <svg class="status-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3l10 18H2z"></path>
-          <path d="M12 10v4M12 17h.01"></path>
-        </svg>
-        <div>
-          <strong>Warnings</strong>
-          <ul id="warningsList"></ul>
-        </div>
-      </div>
-
-      <div id="result" class="result hidden">
-        <div class="frame">
-          <span class="corner corner-tl"></span>
-          <span class="corner corner-tr"></span>
-          <span class="corner corner-bl"></span>
-          <span class="corner corner-br"></span>
-          <img id="resultImage" alt="Plotted annotations">
-        </div>
-        <div class="result-toolbar">
-          <a id="downloadLink" class="btn btn-secondary" download>Download PNG</a>
-          <dl class="stats mono">
-            <div>
-              <dt>Plotted</dt>
-              <dd id="statPlotted">0</dd>
-            </div>
-            <div>
-              <dt>Skipped</dt>
-              <dd id="statSkipped">0</dd>
-            </div>
-          </dl>
-        </div>
-      </div>
+      <div id="resultsList" class="results-list hidden"></div>
     </section>
   </main>
 
@@ -655,18 +656,12 @@
   const formatSelect = document.getElementById('format');
   const classesField = document.getElementById('classesField');
   const classesInput = document.getElementById('classes');
+  const imageInput = document.getElementById('image');
   const form = document.getElementById('plotForm');
   const submitBtn = document.getElementById('submitBtn');
-  const errorDiv = document.getElementById('error');
-  const errorText = document.getElementById('errorText');
-  const warningsDiv = document.getElementById('warnings');
-  const warningsList = document.getElementById('warningsList');
   const outputEmpty = document.getElementById('outputEmpty');
-  const resultDiv = document.getElementById('result');
-  const resultImage = document.getElementById('resultImage');
-  const downloadLink = document.getElementById('downloadLink');
-  const statPlotted = document.getElementById('statPlotted');
-  const statSkipped = document.getElementById('statSkipped');
+  const batchStatus = document.getElementById('batchStatus');
+  const resultsList = document.getElementById('resultsList');
 
   function wireFileNameDisplay(inputId, labelId) {
     const input = document.getElementById(inputId);
@@ -681,7 +676,21 @@
       }
     });
   }
-  wireFileNameDisplay('image', 'imageFileName');
+
+  function wireImageFileNameDisplay() {
+    const label = document.getElementById('imageFileName');
+    imageInput.addEventListener('change', () => {
+      const files = imageInput.files;
+      if (files && files.length > 0) {
+        label.textContent = files.length === 1 ? files[0].name : `${files.length} files selected`;
+        label.classList.add('has-file');
+      } else {
+        label.textContent = 'No file selected';
+        label.classList.remove('has-file');
+      }
+    });
+  }
+  wireImageFileNameDisplay();
   wireFileNameDisplay('annotation', 'annotationFileName');
   wireFileNameDisplay('classes', 'classesFileName');
 
@@ -698,65 +707,155 @@
   formatSelect.addEventListener('change', updateClassesVisibility);
   updateClassesVisibility();
 
+  function buildCardShell(filename) {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    const name = document.createElement('span');
+    name.className = 'card-header-name mono';
+    name.textContent = filename;
+    header.appendChild(name);
+    card.appendChild(header);
+
+    return card;
+  }
+
+  function buildErrorCard(filename, message) {
+    const card = buildCardShell(filename);
+
+    const bar = document.createElement('div');
+    bar.className = 'status-bar status-error';
+    bar.setAttribute('role', 'alert');
+    bar.innerHTML = `
+      <svg class="status-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M12 8v5M12 16h.01"></path>
+      </svg>
+      <div><strong>Error</strong><div class="card-error-text"></div></div>
+    `;
+    bar.querySelector('.card-error-text').textContent = message;
+    card.appendChild(bar);
+    return card;
+  }
+
+  function buildSuccessCard(filename, data) {
+    const card = buildCardShell(filename);
+
+    if (data.warnings && data.warnings.length > 0) {
+      const warn = document.createElement('div');
+      warn.className = 'status-bar status-warning';
+      warn.innerHTML = `
+        <svg class="status-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l10 18H2z"></path>
+          <path d="M12 10v4M12 17h.01"></path>
+        </svg>
+        <div><strong>Warnings</strong><ul class="card-warnings-list"></ul></div>
+      `;
+      const ul = warn.querySelector('.card-warnings-list');
+      data.warnings.forEach((w) => {
+        const li = document.createElement('li');
+        li.textContent = w;
+        ul.appendChild(li);
+      });
+      card.appendChild(warn);
+    }
+
+    const dataUrl = `data:${data.media_type};base64,${data.image_base64}`;
+
+    const result = document.createElement('div');
+    result.className = 'result';
+
+    const frame = document.createElement('div');
+    frame.className = 'frame';
+    frame.innerHTML = `
+      <span class="corner corner-tl"></span>
+      <span class="corner corner-tr"></span>
+      <span class="corner corner-bl"></span>
+      <span class="corner corner-br"></span>
+    `;
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.alt = data.filename;
+    frame.appendChild(img);
+    result.appendChild(frame);
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'result-toolbar';
+
+    const download = document.createElement('a');
+    download.className = 'btn btn-secondary';
+    download.href = dataUrl;
+    download.setAttribute('download', data.filename);
+    download.textContent = 'Download PNG';
+    toolbar.appendChild(download);
+
+    const stats = document.createElement('dl');
+    stats.className = 'stats mono';
+    stats.innerHTML = `
+      <div><dt>Plotted</dt><dd class="stat-plotted"></dd></div>
+      <div><dt>Skipped</dt><dd class="stat-skipped"></dd></div>
+    `;
+    stats.querySelector('.stat-plotted').textContent = data.annotation_count;
+    stats.querySelector('.stat-skipped').textContent = data.skipped_count;
+    toolbar.appendChild(stats);
+
+    result.appendChild(toolbar);
+    card.appendChild(result);
+
+    return card;
+  }
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
 
-    errorDiv.classList.add('hidden');
-    errorText.textContent = '';
-    warningsDiv.classList.add('hidden');
-    warningsList.innerHTML = '';
-    resultDiv.classList.add('hidden');
+    const images = Array.from(imageInput.files || []);
+    const annotationFile = document.getElementById('annotation').files[0];
+    const format = formatSelect.value;
+    const classesFile = format === 'yolo' && classesInput.files[0] ? classesInput.files[0] : null;
+
+    resultsList.innerHTML = '';
+    resultsList.classList.add('hidden');
     outputEmpty.classList.add('hidden');
+    batchStatus.classList.remove('hidden');
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Plotting…';
 
-    const formData = new FormData();
-    formData.append('image', document.getElementById('image').files[0]);
-    formData.append('annotation', document.getElementById('annotation').files[0]);
-    formData.append('format', formatSelect.value);
-    if (formatSelect.value === 'yolo' && classesInput.files[0]) {
-      formData.append('classes', classesInput.files[0]);
-    }
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
+      batchStatus.textContent = images.length > 1 ? `Plotting ${i + 1} of ${images.length}…` : 'Plotting…';
 
-    try {
-      const response = await fetch('/plot', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        errorText.textContent = data.detail || 'Request failed.';
-        errorDiv.classList.remove('hidden');
-        outputEmpty.classList.remove('hidden');
-        return;
+      const formData = new FormData();
+      formData.append('image', image);
+      formData.append('annotation', annotationFile);
+      formData.append('format', format);
+      if (classesFile) {
+        formData.append('classes', classesFile);
       }
 
-      if (data.warnings && data.warnings.length > 0) {
-        warningsList.innerHTML = data.warnings.map(w => `<li>${w}</li>`).join('');
-        warningsDiv.classList.remove('hidden');
+      let card;
+      try {
+        const response = await fetch('/plot', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+        card = response.ok
+          ? buildSuccessCard(image.name, data)
+          : buildErrorCard(image.name, data.detail || 'Request failed.');
+      } catch (err) {
+        card = buildErrorCard(image.name, 'Request failed: ' + err.message);
       }
 
-      const dataUrl = `data:${data.media_type};base64,${data.image_base64}`;
-      resultImage.src = dataUrl;
-      resultImage.alt = data.filename;
-
-      downloadLink.href = dataUrl;
-      downloadLink.download = data.filename;
-
-      statPlotted.textContent = data.annotation_count;
-      statSkipped.textContent = data.skipped_count;
-
-      resultDiv.classList.remove('hidden');
-    } catch (err) {
-      errorText.textContent = 'Request failed: ' + err.message;
-      errorDiv.classList.remove('hidden');
-      outputEmpty.classList.remove('hidden');
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Plot';
+      resultsList.appendChild(card);
+      resultsList.classList.remove('hidden');
     }
+
+    batchStatus.classList.add('hidden');
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Plot';
   });
 </script>
 </body>
