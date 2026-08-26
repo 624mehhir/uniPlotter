@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UniPlotter</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 900px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #222;
+  }
+  h1 {
+    font-size: 1.4rem;
+  }
+  form {
+    display: grid;
+    gap: 0.75rem;
+    border: 1px solid #ccc;
+    padding: 1rem;
+    border-radius: 6px;
+  }
+  label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+  #classesField.hidden {
+    display: none;
+  }
+  button {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  #warnings {
+    color: #8a5a00;
+    background: #fff8e6;
+    border: 1px solid #f0d68a;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-top: 1rem;
+  }
+  #error {
+    color: #a30000;
+    background: #fdecec;
+    border: 1px solid #f0a8a8;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-top: 1rem;
+  }
+  #result img {
+    max-width: 100%;
+    margin-top: 1rem;
+    border: 1px solid #ccc;
+  }
+  #meta {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: #555;
+  }
+</style>
+</head>
+<body>
+  <h1>UniPlotter — Universal Annotation Plotter</h1>
+  <form id="plotForm">
+    <div>
+      <label for="image">Image file</label>
+      <input type="file" id="image" name="image" accept="image/*" required>
+    </div>
+    <div>
+      <label for="format">Format</label>
+      <select id="format" name="format" required>
+        <option value="coco">COCO</option>
+        <option value="yolo">YOLO</option>
+        <option value="voc">Pascal VOC</option>
+        <option value="labelme">LabelMe</option>
+        <option value="labelstudio">Label Studio</option>
+        <option value="cvat">CVAT</option>
+      </select>
+    </div>
+    <div>
+      <label for="annotation">Annotation file</label>
+      <input type="file" id="annotation" name="annotation" required>
+    </div>
+    <div id="classesField" class="hidden">
+      <label for="classes">Classes file (classes.txt)</label>
+      <input type="file" id="classes" name="classes">
+    </div>
+    <button type="submit">Plot</button>
+  </form>
+
+  <div id="error" class="hidden"></div>
+  <div id="warnings" class="hidden"></div>
+  <div id="result"></div>
+
+  <script>
+    const formatSelect = document.getElementById('format');
+    const classesField = document.getElementById('classesField');
+    const classesInput = document.getElementById('classes');
+    const form = document.getElementById('plotForm');
+    const errorDiv = document.getElementById('error');
+    const warningsDiv = document.getElementById('warnings');
+    const resultDiv = document.getElementById('result');
+
+    function updateClassesVisibility() {
+      if (formatSelect.value === 'yolo') {
+        classesField.classList.remove('hidden');
+      } else {
+        classesField.classList.add('hidden');
+        classesInput.value = '';
+      }
+    }
+    formatSelect.addEventListener('change', updateClassesVisibility);
+    updateClassesVisibility();
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      errorDiv.classList.add('hidden');
+      errorDiv.textContent = '';
+      warningsDiv.classList.add('hidden');
+      warningsDiv.innerHTML = '';
+      resultDiv.innerHTML = '';
+
+      const formData = new FormData();
+      formData.append('image', document.getElementById('image').files[0]);
+      formData.append('annotation', document.getElementById('annotation').files[0]);
+      formData.append('format', formatSelect.value);
+      if (formatSelect.value === 'yolo' && classesInput.files[0]) {
+        formData.append('classes', classesInput.files[0]);
+      }
+
+      try {
+        const response = await fetch('/plot', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          errorDiv.textContent = data.detail || 'Request failed.';
+          errorDiv.classList.remove('hidden');
+          return;
+        }
+
+        if (data.warnings && data.warnings.length > 0) {
+          warningsDiv.innerHTML = '<strong>Warnings:</strong><ul>' +
+            data.warnings.map(w => `<li>${w}</li>`).join('') +
+            '</ul>';
+          warningsDiv.classList.remove('hidden');
+        }
+
+        const img = document.createElement('img');
+        img.src = `data:${data.media_type};base64,${data.image_base64}`;
+        img.alt = data.filename;
+
+        const meta = document.createElement('div');
+        meta.id = 'meta';
+        meta.textContent =
+          `${data.annotation_count} annotation(s) plotted, ${data.skipped_count} skipped.`;
+
+        resultDiv.appendChild(img);
+        resultDiv.appendChild(meta);
+      } catch (err) {
+        errorDiv.textContent = 'Request failed: ' + err.message;
+        errorDiv.classList.remove('hidden');
+      }
+    });
+  </script>
+</body>
+</html>

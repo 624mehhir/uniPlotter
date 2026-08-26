@@ -3,12 +3,16 @@ import base64
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.draw import draw_annotations
 from app.parsers import coco, cvat, labelme, labelstudio, voc, yolo
 from app.schema import ParseError
 
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 PARSERS = {
     "coco": coco.parse,
@@ -20,9 +24,14 @@ PARSERS = {
 }
 
 
-@app.get("/")
+@app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/")
+def index():
+    return FileResponse("app/static/index.html")
 
 
 @app.post("/plot")
