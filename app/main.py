@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.draw import draw_annotations
-from app.parsers import coco, cvat, labelme, labelstudio, voc, yolo
+from app.parsers import coco, cvat, labelme, labelstudio, lekhana, voc, yolo
 from app.schema import ParseError
 
 app = FastAPI()
@@ -21,6 +21,7 @@ PARSERS = {
     "labelstudio": labelstudio.parse,
     "cvat": cvat.parse,
     "yolo": yolo.parse,
+    "lekhana": lekhana.parse,
 }
 
 
