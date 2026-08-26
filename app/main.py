@@ -5,7 +5,7 @@ import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from app.draw import draw_annotations
-from app.parsers import coco, labelme, voc
+from app.parsers import coco, cvat, labelme, labelstudio, voc
 from app.schema import ParseError
 
 app = FastAPI()
@@ -14,6 +14,8 @@ PARSERS = {
     "coco": coco.parse,
     "labelme": labelme.parse,
     "voc": voc.parse,
+    "labelstudio": labelstudio.parse,
+    "cvat": cvat.parse,
 }
 
 

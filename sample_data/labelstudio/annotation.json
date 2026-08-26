@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "data": {
+      "image": "/data/upload/3/a1b2c3-image.jpg"
+    },
+    "annotations": [
+      {
+        "id": 1,
+        "result": [
+          {
+            "id": "scratch_poly",
+            "type": "polygonlabels",
+            "original_width": 600,
+            "original_height": 400,
+            "value": {
+              "points": [
+                [8.333333, 12.5],
+                [30.0, 15.0],
+                [28.333333, 37.5],
+                [6.666667, 35.0]
+              ],
+              "polygonlabels": ["scratch"]
+            }
+          },
+          {
+            "id": "dent_rect",
+            "type": "rectanglelabels",
+            "original_width": 600,
+            "original_height": 400,
+            "value": {
+              "x": 50.0,
+              "y": 25.0,
+              "width": 20.0,
+              "height": 20.0,
+              "rotation": 0,
+              "rectanglelabels": ["dent"]
+            }
+          },
+          {
+            "id": "scuff_rect",
+            "type": "rectanglelabels",
+            "original_width": 600,
+            "original_height": 400,
+            "value": {
+              "x": 70.0,
+              "y": 55.0,
+              "width": 16.666667,
+              "height": 15.0,
+              "rotation": 12.0,
+              "rectanglelabels": ["scuff"]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
