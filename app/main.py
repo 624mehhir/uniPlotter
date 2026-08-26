@@ -5,7 +5,7 @@ import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from app.draw import draw_annotations
-from app.parsers import coco, cvat, labelme, labelstudio, voc
+from app.parsers import coco, cvat, labelme, labelstudio, voc, yolo
 from app.schema import ParseError
 
 app = FastAPI()
@@ -16,6 +16,7 @@ PARSERS = {
     "voc": voc.parse,
     "labelstudio": labelstudio.parse,
     "cvat": cvat.parse,
+    "yolo": yolo.parse,
 }
 
 
@@ -29,6 +30,7 @@ async def plot(
     image: UploadFile = File(...),
     annotation: UploadFile = File(...),
     format: str = Form(...),
+    classes: UploadFile = File(None),
 ):
     parser = PARSERS.get(format)
     if parser is None:
@@ -38,6 +40,13 @@ async def plot(
                 f"Unsupported format '{format}'. Supported formats: "
                 f"{', '.join(PARSERS)}."
             ),
+        )
+
+    if format == "yolo" and classes is None:
+        raise HTTPException(
+            status_code=400,
+            detail="YOLO format requires a 'classes' file (classes.txt) in "
+            "addition to the annotation file.",
         )
 
     image_bytes = await image.read()
@@ -53,7 +62,17 @@ async def plot(
     image_height, image_width = decoded_image.shape[:2]
 
     try:
-        result = parser(annotation_bytes, image_width, image_height, image.filename)
+        if format == "yolo":
+            classes_bytes = await classes.read()
+            result = parser(
+                annotation_bytes,
+                image_width,
+                image_height,
+                image.filename,
+                classes_bytes,
+            )
+        else:
+            result = parser(annotation_bytes, image_width, image_height, image.filename)
     except ParseError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
