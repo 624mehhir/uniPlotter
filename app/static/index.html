@@ -112,7 +112,7 @@
   a { color: inherit; }
 
   .page {
-    max-width: 1080px;
+    max-width: min(1600px, 96vw);
     margin: 0 auto;
   }
 
@@ -176,7 +176,7 @@
 
   .layout {
     display: grid;
-    grid-template-columns: minmax(300px, 380px) 1fr;
+    grid-template-columns: minmax(260px, 300px) 1fr;
     gap: 1.25rem;
     align-items: start;
   }
@@ -499,8 +499,10 @@
   .frame img {
     display: block;
     max-width: 100%;
+    max-height: 58vh;
     height: auto;
     border-radius: 2px;
+    cursor: zoom-in;
   }
 
   .corner {
@@ -515,6 +517,136 @@
   .corner-tr { top: -7px; right: -7px; border-top-width: 2px; border-right-width: 2px; }
   .corner-bl { bottom: -7px; left: -7px; border-bottom-width: 2px; border-left-width: 2px; }
   .corner-br { bottom: -7px; right: -7px; border-bottom-width: 2px; border-right-width: 2px; }
+
+  .expand-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 2.1rem;
+    height: 2.1rem;
+    background: rgba(20, 22, 26, 0.55);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #fff;
+    z-index: 2;
+  }
+
+  .expand-btn:hover {
+    background: rgba(20, 22, 26, 0.75);
+    border-color: #fff;
+  }
+
+  .zip-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .download-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .dl-format {
+    width: auto;
+    padding: 0.4rem 1.7rem 0.4rem 0.6rem;
+    font-size: 0.78rem;
+  }
+
+  .fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 9, 11, 0.94);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .fullscreen-overlay.hidden { display: none !important; }
+
+  .fullscreen-img {
+    max-width: 92vw;
+    max-height: 92vh;
+    object-fit: contain;
+    border-radius: 2px;
+    touch-action: none;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  .fullscreen-zoom-controls {
+    position: absolute;
+    top: 1.25rem;
+    left: 1.25rem;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .fullscreen-zoom-btn {
+    width: 2.1rem;
+    height: 2.1rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .fullscreen-zoom-btn:hover { border-color: #fff; }
+  .fullscreen-zoom-btn:disabled { opacity: 0.3; cursor: default; }
+
+  .fullscreen-zoom-level {
+    color: #f1f2f5;
+    font-size: 0.75rem;
+    min-width: 3rem;
+    text-align: center;
+  }
+
+  .fullscreen-close {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+  }
+
+  .fullscreen-close:hover { border-color: #fff; }
+
+  .fullscreen-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    width: 2.8rem;
+    height: 2.8rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+  }
+
+  .fullscreen-nav:hover { border-color: #fff; }
+  .fullscreen-nav:disabled { opacity: 0.3; cursor: default; }
+  .fullscreen-nav.hidden { display: none !important; }
+
+  .fullscreen-prev { left: 1.25rem; }
+  .fullscreen-next { right: 1.25rem; }
+
+  .fullscreen-position {
+    position: absolute;
+    bottom: 1.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    color: #f1f2f5;
+    font-size: 0.8rem;
+    opacity: 0.85;
+  }
 
   .result-toolbar {
     display: flex;
@@ -620,7 +752,7 @@
         <div class="field">
           <label class="field-label" for="annotation">Annotation file</label>
           <div class="file-control">
-            <input type="file" id="annotation" name="annotation" required class="file-input">
+            <input type="file" id="annotation" name="annotation" required class="file-input" accept=".json">
             <label for="annotation" class="file-button">Browse</label>
             <span class="file-name" id="annotationFileName">No file selected</span>
           </div>
@@ -629,7 +761,7 @@
         <div id="classesField" class="field hidden">
           <label class="field-label" for="classes">Classes file (classes.txt)</label>
           <div class="file-control">
-            <input type="file" id="classes" name="classes" class="file-input">
+            <input type="file" id="classes" name="classes" class="file-input" accept=".txt">
             <label for="classes" class="file-button">Browse</label>
             <span class="file-name" id="classesFileName">No file selected</span>
           </div>
@@ -658,7 +790,13 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
             </button>
           </div>
-          <button id="downloadAllBtn" type="button" class="btn btn-secondary hidden">Download All (ZIP)</button>
+          <div id="zipControls" class="zip-controls hidden">
+            <select id="zipFormatSelect" class="dl-format mono" aria-label="Download All format">
+              <option value="png">PNG</option>
+              <option value="jpg">JPG</option>
+            </select>
+            <button id="downloadAllBtn" type="button" class="btn btn-secondary">Download All (ZIP)</button>
+          </div>
         </div>
 
         <div id="slideCard" class="slide-card"></div>
@@ -667,6 +805,25 @@
   </main>
 
   <footer>UniPlotter &mdash; stateless annotation verification, 7 formats</footer>
+</div>
+
+<div id="fullscreenOverlay" class="fullscreen-overlay hidden" role="dialog" aria-modal="true" aria-label="Plotted image, fullscreen">
+  <div class="fullscreen-zoom-controls">
+    <button id="zoomOutBtn" type="button" class="icon-btn fullscreen-zoom-btn" aria-label="Zoom out">&minus;</button>
+    <span id="zoomLevelIndicator" class="fullscreen-zoom-level mono">100%</span>
+    <button id="zoomInBtn" type="button" class="icon-btn fullscreen-zoom-btn" aria-label="Zoom in">+</button>
+  </div>
+  <button id="fullscreenClose" type="button" class="icon-btn fullscreen-close" aria-label="Close fullscreen">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <button id="fullscreenPrev" type="button" class="icon-btn fullscreen-nav fullscreen-prev" aria-label="Previous image">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+  <img id="fullscreenImg" class="fullscreen-img" alt="" draggable="false">
+  <button id="fullscreenNext" type="button" class="icon-btn fullscreen-nav fullscreen-next" aria-label="Next image">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+  </button>
+  <div id="fullscreenPosition" class="fullscreen-position mono"></div>
 </div>
 
 <script>
@@ -709,7 +866,18 @@
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
   const positionIndicator = document.getElementById('positionIndicator');
+  const zipControls = document.getElementById('zipControls');
+  const zipFormatSelect = document.getElementById('zipFormatSelect');
   const downloadAllBtn = document.getElementById('downloadAllBtn');
+  const fullscreenOverlay = document.getElementById('fullscreenOverlay');
+  const fullscreenImg = document.getElementById('fullscreenImg');
+  const fullscreenClose = document.getElementById('fullscreenClose');
+  const fullscreenPrev = document.getElementById('fullscreenPrev');
+  const fullscreenNext = document.getElementById('fullscreenNext');
+  const fullscreenPosition = document.getElementById('fullscreenPosition');
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const zoomLevelIndicator = document.getElementById('zoomLevelIndicator');
 
   function wireFileNameDisplay(inputId, labelId) {
     const input = document.getElementById(inputId);
@@ -754,6 +922,23 @@
   }
   formatSelect.addEventListener('change', updateClassesVisibility);
   updateClassesVisibility();
+
+  const ANNOTATION_ACCEPT = {
+    coco: '.json',
+    labelme: '.json',
+    labelstudio: '.json',
+    lekhana: '.json',
+    voc: '.xml',
+    cvat: '.xml',
+    yolo: '.txt',
+  };
+  const annotationInput = document.getElementById('annotation');
+
+  function updateAnnotationAccept() {
+    annotationInput.setAttribute('accept', ANNOTATION_ACCEPT[formatSelect.value] || '');
+  }
+  formatSelect.addEventListener('change', updateAnnotationAccept);
+  updateAnnotationAccept();
 
   function buildErrorBody(message) {
     const bar = document.createElement('div');
@@ -815,18 +1000,46 @@
     const img = document.createElement('img');
     img.src = dataUrl;
     img.alt = data.filename;
+    img.addEventListener('dblclick', openFullscreen);
     frame.appendChild(img);
+
+    const expandBtn = document.createElement('button');
+    expandBtn.type = 'button';
+    expandBtn.className = 'icon-btn expand-btn';
+    expandBtn.setAttribute('aria-label', 'View fullscreen');
+    expandBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg>';
+    expandBtn.addEventListener('click', openFullscreen);
+    frame.appendChild(expandBtn);
+
     result.appendChild(frame);
 
     const toolbar = document.createElement('div');
     toolbar.className = 'result-toolbar';
 
-    const download = document.createElement('a');
-    download.className = 'btn btn-secondary';
-    download.href = dataUrl;
-    download.setAttribute('download', data.filename);
-    download.textContent = 'Download PNG';
-    toolbar.appendChild(download);
+    const downloadRow = document.createElement('div');
+    downloadRow.className = 'download-row';
+
+    const downloadFormat = document.createElement('select');
+    downloadFormat.className = 'dl-format mono';
+    downloadFormat.setAttribute('aria-label', 'Download format');
+    downloadFormat.innerHTML = '<option value="png">PNG</option><option value="jpg">JPG</option>';
+
+    const downloadBtn = document.createElement('button');
+    downloadBtn.type = 'button';
+    downloadBtn.className = 'btn btn-secondary';
+    downloadBtn.textContent = 'Download';
+    downloadBtn.addEventListener('click', async () => {
+      downloadBtn.disabled = true;
+      try {
+        await downloadImage(data, downloadFormat.value);
+      } finally {
+        downloadBtn.disabled = false;
+      }
+    });
+
+    downloadRow.appendChild(downloadFormat);
+    downloadRow.appendChild(downloadBtn);
+    toolbar.appendChild(downloadRow);
 
     const stats = document.createElement('dl');
     stats.className = 'stats mono';
@@ -883,7 +1096,7 @@
     prevBtn.classList.toggle('hidden', !multi);
     nextBtn.classList.toggle('hidden', !multi);
     positionIndicator.classList.toggle('hidden', !multi);
-    downloadAllBtn.classList.toggle('hidden', !multi);
+    zipControls.classList.toggle('hidden', !multi);
 
     if (multi) {
       positionIndicator.textContent = `${currentIndex + 1} of ${slides.length}`;
@@ -891,6 +1104,10 @@
       const upperBound = batchRunning ? maxReachedIndex : slides.length - 1;
       nextBtn.disabled = currentIndex >= upperBound;
       downloadAllBtn.disabled = batchRunning;
+    }
+
+    if (!fullscreenOverlay.classList.contains('hidden')) {
+      updateFullscreen();
     }
   }
 
@@ -908,6 +1125,223 @@
       renderSlide();
     }
   });
+
+  // ---- Fullscreen viewer ----
+
+  let fullscreenShownIndex = -1;
+
+  function updateFullscreen() {
+    const slide = slides[currentIndex];
+    if (currentIndex !== fullscreenShownIndex) {
+      resetZoom();
+      fullscreenShownIndex = currentIndex;
+    }
+    if (slide && slide.status === 'success') {
+      fullscreenImg.src = `data:${slide.data.media_type};base64,${slide.data.image_base64}`;
+      fullscreenImg.alt = slide.data.filename;
+    }
+
+    const multi = slides.length > 1;
+    fullscreenPosition.textContent = multi ? `${currentIndex + 1} of ${slides.length}` : '';
+    fullscreenPrev.classList.toggle('hidden', !multi);
+    fullscreenNext.classList.toggle('hidden', !multi);
+    if (multi) {
+      const upperBound = batchRunning ? maxReachedIndex : slides.length - 1;
+      fullscreenPrev.disabled = currentIndex <= 0;
+      fullscreenNext.disabled = currentIndex >= upperBound;
+    }
+  }
+
+  function openFullscreen() {
+    const slide = slides[currentIndex];
+    if (!slide || slide.status !== 'success') return;
+    fullscreenShownIndex = -1;
+    fullscreenOverlay.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    updateFullscreen();
+  }
+
+  function closeFullscreen() {
+    fullscreenOverlay.classList.add('hidden');
+    document.body.style.overflow = '';
+    resetZoom();
+    fullscreenShownIndex = -1;
+  }
+
+  // ---- Fullscreen zoom / pan ----
+
+  const ZOOM_MIN = 1;
+  const ZOOM_MAX = 4;
+  const ZOOM_STEP = 0.5;
+
+  let zoomLevel = 1;
+  let panX = 0;
+  let panY = 0;
+  let isPanning = false;
+  let panPointerId = null;
+  let panStartClientX = 0;
+  let panStartClientY = 0;
+  let panOriginX = 0;
+  let panOriginY = 0;
+
+  function clampPan() {
+    // The image's own unscaled layout box is the reference "viewport" for
+    // panning: at zoomLevel, the scaled box overflows that footprint by
+    // (size*zoomLevel - size), so panning past half that overflow in either
+    // direction would pull the image's edge in from where it used to reach.
+    if (zoomLevel <= ZOOM_MIN) {
+      panX = 0;
+      panY = 0;
+      return;
+    }
+    const boxWidth = fullscreenImg.offsetWidth;
+    const boxHeight = fullscreenImg.offsetHeight;
+    const maxPanX = Math.max(0, (boxWidth * zoomLevel - boxWidth) / 2);
+    const maxPanY = Math.max(0, (boxHeight * zoomLevel - boxHeight) / 2);
+    panX = Math.min(maxPanX, Math.max(-maxPanX, panX));
+    panY = Math.min(maxPanY, Math.max(-maxPanY, panY));
+  }
+
+  function applyZoomTransform() {
+    fullscreenImg.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+    fullscreenImg.style.cursor = zoomLevel > ZOOM_MIN ? (isPanning ? 'grabbing' : 'grab') : 'default';
+    zoomLevelIndicator.textContent = `${Math.round(zoomLevel * 100)}%`;
+    zoomOutBtn.disabled = zoomLevel <= ZOOM_MIN;
+    zoomInBtn.disabled = zoomLevel >= ZOOM_MAX;
+  }
+
+  function resetZoom() {
+    zoomLevel = ZOOM_MIN;
+    panX = 0;
+    panY = 0;
+    isPanning = false;
+    clampPan();
+    applyZoomTransform();
+  }
+
+  function setZoom(next) {
+    zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+    clampPan();
+    applyZoomTransform();
+  }
+
+  zoomInBtn.addEventListener('click', () => setZoom(zoomLevel + ZOOM_STEP));
+  zoomOutBtn.addEventListener('click', () => setZoom(zoomLevel - ZOOM_STEP));
+
+  fullscreenOverlay.addEventListener('wheel', (event) => {
+    if (fullscreenOverlay.classList.contains('hidden')) return;
+    event.preventDefault();
+    setZoom(zoomLevel + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+  }, { passive: false });
+
+  fullscreenImg.addEventListener('pointerdown', (event) => {
+    if (zoomLevel <= ZOOM_MIN) return;
+    isPanning = true;
+    panPointerId = event.pointerId;
+    panStartClientX = event.clientX;
+    panStartClientY = event.clientY;
+    panOriginX = panX;
+    panOriginY = panY;
+    fullscreenImg.setPointerCapture(event.pointerId);
+    applyZoomTransform();
+  });
+
+  fullscreenImg.addEventListener('pointermove', (event) => {
+    if (!isPanning || event.pointerId !== panPointerId) return;
+    panX = panOriginX + (event.clientX - panStartClientX);
+    panY = panOriginY + (event.clientY - panStartClientY);
+    clampPan();
+    applyZoomTransform();
+  });
+
+  function endPan(event) {
+    if (!isPanning || event.pointerId !== panPointerId) return;
+    isPanning = false;
+    panPointerId = null;
+    applyZoomTransform();
+  }
+  fullscreenImg.addEventListener('pointerup', endPan);
+  fullscreenImg.addEventListener('pointercancel', endPan);
+
+  fullscreenClose.addEventListener('click', closeFullscreen);
+
+  fullscreenOverlay.addEventListener('click', (event) => {
+    if (event.target === fullscreenOverlay) closeFullscreen();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (fullscreenOverlay.classList.contains('hidden')) return;
+    if (event.key === 'Escape') {
+      closeFullscreen();
+    } else if (event.key === 'ArrowLeft') {
+      fullscreenPrev.click();
+    } else if (event.key === 'ArrowRight') {
+      fullscreenNext.click();
+    }
+  });
+
+  fullscreenPrev.addEventListener('click', () => {
+    if (currentIndex > 0) {
+      currentIndex--;
+      renderSlide();
+    }
+  });
+
+  fullscreenNext.addEventListener('click', () => {
+    const upperBound = batchRunning ? maxReachedIndex : slides.length - 1;
+    if (currentIndex < upperBound) {
+      currentIndex++;
+      renderSlide();
+    }
+  });
+
+  // ---- PNG -> JPEG conversion (canvas, client-side only; /plot still returns PNG) ----
+
+  function pngBase64ToJpegBytes(base64, quality) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image, 0, 0);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('JPEG conversion failed'));
+            return;
+          }
+          blob.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)));
+        }, 'image/jpeg', quality);
+      };
+      image.onerror = () => reject(new Error('Failed to load image for JPEG conversion'));
+      image.src = `data:image/png;base64,${base64}`;
+    });
+  }
+
+  function withExtension(filename, ext) {
+    return filename.replace(/\.[^./\\]+$/, '') + '.' + ext;
+  }
+
+  function triggerBlobDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadImage(data, format) {
+    if (format === 'jpg') {
+      const jpegBytes = await pngBase64ToJpegBytes(data.image_base64, 0.92);
+      triggerBlobDownload(new Blob([jpegBytes], { type: 'image/jpeg' }), withExtension(data.filename, 'jpg'));
+    } else {
+      triggerBlobDownload(new Blob([base64ToBytes(data.image_base64)], { type: 'image/png' }), data.filename);
+    }
+  }
 
   // ---- ZIP encoding (STORE method, hand-written — no library/CDN) ----
 
@@ -1006,23 +1440,27 @@
     return bytes;
   }
 
-  downloadAllBtn.addEventListener('click', () => {
+  downloadAllBtn.addEventListener('click', async () => {
     const successSlides = slides.filter((s) => s.status === 'success');
     if (successSlides.length === 0) return;
 
-    const entries = successSlides.map((s) => ({
-      name: s.data.filename,
-      data: base64ToBytes(s.data.image_base64),
-    }));
-    const blob = buildZip(entries);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'uniplotter_batch.zip';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadAllBtn.disabled = true;
+    try {
+      const format = zipFormatSelect.value;
+      const entries = [];
+      for (const s of successSlides) {
+        if (format === 'jpg') {
+          const jpegBytes = await pngBase64ToJpegBytes(s.data.image_base64, 0.92);
+          entries.push({ name: withExtension(s.data.filename, 'jpg'), data: jpegBytes });
+        } else {
+          entries.push({ name: s.data.filename, data: base64ToBytes(s.data.image_base64) });
+        }
+      }
+      const blob = buildZip(entries);
+      triggerBlobDownload(blob, 'uniplotter_batch.zip');
+    } finally {
+      downloadAllBtn.disabled = false;
+    }
   });
 
   // ---- Submit / plotting loop ----
@@ -1090,6 +1528,7 @@
     batchStatus.classList.add('hidden');
     submitBtn.disabled = false;
     submitBtn.textContent = 'Plot';
+    currentIndex = 0;
     renderSlide();
   });
 </script>
