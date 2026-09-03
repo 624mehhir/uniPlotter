@@ -303,6 +303,32 @@
 
   select:hover { border-color: var(--border-strong); }
 
+  .checkbox-field {
+    display: flex;
+    align-items: center;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .checkbox-label input[type="checkbox"]:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
   input:focus-visible,
   select:focus-visible,
   button:focus-visible,
@@ -749,6 +775,13 @@
           </select>
         </div>
 
+        <div class="field checkbox-field">
+          <label class="checkbox-label" for="showLabels">
+            <input type="checkbox" id="showLabels" checked>
+            <span>Show labels</span>
+          </label>
+        </div>
+
         <div class="field">
           <label class="field-label" for="annotation">Annotation file</label>
           <div class="file-control">
@@ -857,6 +890,7 @@
   const classesField = document.getElementById('classesField');
   const classesInput = document.getElementById('classes');
   const imageInput = document.getElementById('image');
+  const showLabelsInput = document.getElementById('showLabels');
   const form = document.getElementById('plotForm');
   const submitBtn = document.getElementById('submitBtn');
   const outputEmpty = document.getElementById('outputEmpty');
@@ -962,6 +996,13 @@
     return bar;
   }
 
+  function buildLoadingBody() {
+    const bar = document.createElement('div');
+    bar.className = 'output-empty';
+    bar.textContent = 'Updating…';
+    return bar;
+  }
+
   function buildSuccessBody(data) {
     const frag = document.createDocumentFragment();
 
@@ -1059,10 +1100,46 @@
 
   // ---- Carousel state ----
 
-  let slides = [];        // { filename, status: 'pending'|'success'|'error', data, message }
+  // Each slide: { filename, status: 'pending'|'success'|'error', message,
+  //   image, annotationFile, format, classesFile,  <- captured at initial
+  //     plot time; every later re-process of this slide reuses these,
+  //     never the live form inputs, so a toggle can't silently mix data
+  //   variants: { true: <plot response>, false: <plot response> },  <- cached
+  //     per label state, keyed by the show-labels boolean as a string
+  //   fetchPromises: { true: Promise, false: Promise } }  <- in-flight
+  //     catch-up requests, so concurrent callers (navigation + Download
+  //     All) share one request instead of firing duplicates
+  let slides = [];
   let currentIndex = 0;
   let maxReachedIndex = -1;
   let batchRunning = false;
+
+  function desiredLabelKey() {
+    return showLabelsInput.checked ? 'true' : 'false';
+  }
+
+  // Fires (or reuses) exactly one /plot request for this slide's captured
+  // inputs at the given label state, caching the result on the slide. A
+  // slide is never re-processed here unless its status is already
+  // 'success' — a failed slide's error is a parse/selection problem
+  // unrelated to label rendering, so callers must check status themselves
+  // before calling this.
+  function ensureSlideVariant(slide, showLabels) {
+    const key = showLabels ? 'true' : 'false';
+    if (slide.variants[key]) return Promise.resolve();
+    if (slide.fetchPromises[key]) return slide.fetchPromises[key];
+    const promise = plotOne(slide, showLabels).then((result) => {
+      delete slide.fetchPromises[key];
+      if (result.ok) {
+        slide.variants[key] = result.data;
+      } else {
+        slide.status = 'error';
+        slide.message = result.message;
+      }
+    });
+    slide.fetchPromises[key] = promise;
+    return promise;
+  }
 
   function renderSlide() {
     if (slides.length === 0) {
@@ -1074,6 +1151,7 @@
     carousel.classList.remove('hidden');
 
     const slide = slides[currentIndex];
+    const shownIndex = currentIndex;
 
     slideCard.innerHTML = '';
     const header = document.createElement('div');
@@ -1089,7 +1167,22 @@
     } else if (slide.status === 'error') {
       slideCard.appendChild(buildErrorBody(slide.message));
     } else {
-      slideCard.appendChild(buildSuccessBody(slide.data));
+      const key = desiredLabelKey();
+      const data = slide.variants[key];
+      if (data) {
+        slideCard.appendChild(buildSuccessBody(data));
+      } else {
+        // Stale: this slide hasn't been plotted at the currently-desired
+        // label state yet. Catch it up lazily, only for the slide actually
+        // on screen, and only re-render once done if the user hasn't
+        // already navigated away from it in the meantime.
+        slideCard.appendChild(buildLoadingBody());
+        ensureSlideVariant(slide, showLabelsInput.checked).then(() => {
+          if (currentIndex === shownIndex) {
+            renderSlide();
+          }
+        });
+      }
     }
 
     const multi = slides.length > 1;
@@ -1136,9 +1229,14 @@
       resetZoom();
       fullscreenShownIndex = currentIndex;
     }
-    if (slide && slide.status === 'success') {
-      fullscreenImg.src = `data:${slide.data.media_type};base64,${slide.data.image_base64}`;
-      fullscreenImg.alt = slide.data.filename;
+    // If this slide hasn't been caught up to the currently-desired label
+    // state yet, renderSlide()'s own lazy fetch (already in flight, since
+    // it runs before this) will call this function again once it resolves
+    // — the fullscreen image just keeps showing whatever it had until then.
+    const data = slide && slide.status === 'success' ? slide.variants[desiredLabelKey()] : null;
+    if (data) {
+      fullscreenImg.src = `data:${data.media_type};base64,${data.image_base64}`;
+      fullscreenImg.alt = data.filename;
     }
 
     const multi = slides.length > 1;
@@ -1445,21 +1543,45 @@
     if (successSlides.length === 0) return;
 
     downloadAllBtn.disabled = true;
+    const key = desiredLabelKey();
+    const showLabels = showLabelsInput.checked;
+
     try {
+      // A ZIP mixing labelled and unlabelled images is not acceptable, so
+      // every stale slide is caught up to the desired state first — reusing
+      // the same progress line the initial batch uses — before anything is
+      // zipped. Already-cached slides cost nothing here.
+      const staleSlides = successSlides.filter((s) => !s.variants[key]);
+      if (staleSlides.length > 0) {
+        batchStatus.classList.remove('hidden');
+        for (let i = 0; i < staleSlides.length; i++) {
+          batchStatus.textContent = staleSlides.length > 1
+            ? `Updating ${i + 1} of ${staleSlides.length}…`
+            : 'Updating…';
+          await ensureSlideVariant(staleSlides[i], showLabels);
+        }
+        batchStatus.classList.add('hidden');
+      }
+
       const format = zipFormatSelect.value;
       const entries = [];
       for (const s of successSlides) {
+        const data = s.variants[key];
+        if (!data) continue; // catch-up failed for this slide; leave it out of the ZIP
         if (format === 'jpg') {
-          const jpegBytes = await pngBase64ToJpegBytes(s.data.image_base64, 0.92);
-          entries.push({ name: withExtension(s.data.filename, 'jpg'), data: jpegBytes });
+          const jpegBytes = await pngBase64ToJpegBytes(data.image_base64, 0.92);
+          entries.push({ name: withExtension(data.filename, 'jpg'), data: jpegBytes });
         } else {
-          entries.push({ name: s.data.filename, data: base64ToBytes(s.data.image_base64) });
+          entries.push({ name: data.filename, data: base64ToBytes(data.image_base64) });
         }
       }
-      const blob = buildZip(entries);
-      triggerBlobDownload(blob, 'uniplotter_batch.zip');
+      if (entries.length > 0) {
+        const blob = buildZip(entries);
+        triggerBlobDownload(blob, 'uniplotter_batch.zip');
+      }
     } finally {
       downloadAllBtn.disabled = false;
+      renderSlide();
     }
   });
 
@@ -1469,55 +1591,78 @@
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
   }
 
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
+  // Fires one /plot request for a slide's own captured inputs (never the
+  // live form inputs — a slide may be re-processed long after the user has
+  // changed the annotation file or format for their *next* batch) at the
+  // given label state. Returns a plain result object rather than throwing,
+  // so every caller (the initial batch, a lazy catch-up, the ZIP export
+  // pass) handles success/failure the same way.
+  async function plotOne(slide, showLabels) {
+    const formData = new FormData();
+    formData.append('image', slide.image);
+    formData.append('annotation', slide.annotationFile);
+    formData.append('format', slide.format);
+    formData.append('show_labels', showLabels ? 'true' : 'false');
+    if (slide.classesFile) {
+      formData.append('classes', slide.classesFile);
+    }
+    try {
+      const response = await fetch('/plot', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+      if (response.ok) {
+        return { ok: true, data };
+      }
+      return { ok: false, message: data.detail || 'Request failed.' };
+    } catch (err) {
+      return { ok: false, message: 'Request failed: ' + err.message };
+    }
+  }
 
+  async function runBatch() {
     const images = Array.from(imageInput.files || []).sort((a, b) => naturalCompare(a.name, b.name));
     const annotationFile = document.getElementById('annotation').files[0];
     const format = formatSelect.value;
     const classesFile = format === 'yolo' && classesInput.files[0] ? classesInput.files[0] : null;
+    const showLabels = showLabelsInput.checked;
+    const showLabelsKey = showLabels ? 'true' : 'false';
 
-    slides = images.map((image) => ({ filename: image.name, status: 'pending', data: null, message: null }));
+    slides = images.map((image) => ({
+      filename: image.name,
+      status: 'pending',
+      message: null,
+      image,
+      annotationFile,
+      format,
+      classesFile,
+      variants: {},
+      fetchPromises: {},
+    }));
     currentIndex = 0;
     maxReachedIndex = -1;
     batchRunning = true;
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Plotting…';
+    showLabelsInput.disabled = true;
     batchStatus.classList.remove('hidden');
     renderSlide();
 
     for (let i = 0; i < images.length; i++) {
-      const image = images[i];
       maxReachedIndex = i;
       currentIndex = i;
       batchStatus.textContent = images.length > 1 ? `Plotting ${i + 1} of ${images.length}…` : 'Plotting…';
       renderSlide();
 
-      const formData = new FormData();
-      formData.append('image', image);
-      formData.append('annotation', annotationFile);
-      formData.append('format', format);
-      if (classesFile) {
-        formData.append('classes', classesFile);
-      }
-
-      try {
-        const response = await fetch('/plot', {
-          method: 'POST',
-          body: formData,
-        });
-        const data = await response.json();
-        if (response.ok) {
-          slides[i].status = 'success';
-          slides[i].data = data;
-        } else {
-          slides[i].status = 'error';
-          slides[i].message = data.detail || 'Request failed.';
-        }
-      } catch (err) {
+      const result = await plotOne(slides[i], showLabels);
+      if (result.ok) {
+        slides[i].status = 'success';
+        slides[i].variants[showLabelsKey] = result.data;
+      } else {
         slides[i].status = 'error';
-        slides[i].message = 'Request failed: ' + err.message;
+        slides[i].message = result.message;
       }
 
       currentIndex = i;
@@ -1528,7 +1673,25 @@
     batchStatus.classList.add('hidden');
     submitBtn.disabled = false;
     submitBtn.textContent = 'Plot';
+    showLabelsInput.disabled = false;
     currentIndex = 0;
+    renderSlide();
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    runBatch();
+  });
+
+  // The checkbox is one global desired state for the whole batch; only
+  // *when* each slide catches up to it changes. renderSlide() already
+  // lazily fetches the currently-displayed slide's variant if it's missing
+  // (see above), so toggling just needs to re-render — it re-processes the
+  // current slide immediately and touches nothing else, since every other
+  // slide is only examined (and only then fetched) once actually navigated
+  // to or exported.
+  showLabelsInput.addEventListener('change', () => {
+    if (slides.length === 0 || batchRunning) return;
     renderSlide();
   });
 </script>

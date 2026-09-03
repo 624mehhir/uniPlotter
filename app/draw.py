@@ -76,13 +76,18 @@ def _shape_bbox(points, shape_type):
 LARGE_SHAPE_AREA_FRACTION = 0.25
 
 # Relative cost weights for the placement search. Another label's box is a
-# hard clash (unreadable text on text); another *shape* is only a soft one
-# (a chip resting on a neighbouring outline is still readable), and drift is
-# how far the canvas clamp had to pull a candidate away from the geometry it
-# names — priced high enough that a slightly-overlapping but adjacent spot
-# always beats a clean but distant one.
+# hard clash (unreadable text on text), scored by absolute overlap area.
+# Another *shape* is scored by the FRACTION of that shape's own area the
+# chip covers, not raw pixels — scoring shape clashes by absolute area made
+# covering a small object (few px^2 of overlap) look cheaper than clipping a
+# neighbouring label, so the search preferred erasing small shapes entirely
+# over nudging a label. Fraction-costing makes fully covering any shape cost
+# the same (SHAPE_COVER_COST) regardless of its size. Drift is how far the
+# canvas clamp had to pull a candidate away from the geometry it names —
+# priced high enough that a slightly-overlapping but adjacent spot always
+# beats a clean but distant one.
 LABEL_CLASH_WEIGHT = 1.0
-SHAPE_CLASH_WEIGHT = 0.15
+SHAPE_COVER_COST = 2000.0
 DRIFT_WEIGHT = 40.0
 
 # Cap on how many polygon vertices are used as label anchors. Real exports
@@ -155,14 +160,18 @@ def _label_candidates(anchors, centroid, box_w, box_h, gap):
     return candidates
 
 
-def _best_label_rect(candidates, box_w, box_h, img_w, img_h, avoid):
+def _best_label_rect(candidates, box_w, box_h, img_w, img_h, label_rects, shape_obstacles):
     best_rect = None
     best_cost = None
     for want_x, want_y in candidates:
         box_x = _clamp(int(round(want_x)), 0, max(0, img_w - box_w))
         box_y = _clamp(int(round(want_y)), 0, max(0, img_h - box_h))
         rect = [box_x, box_y, box_x + box_w, box_y + box_h]
-        cost = sum(weight * _rect_overlap_area(rect, other) for other, weight in avoid)
+        cost = sum(LABEL_CLASH_WEIGHT * _rect_overlap_area(rect, other) for other in label_rects)
+        cost += sum(
+            SHAPE_COVER_COST * _rect_overlap_area(rect, shape_rect) / shape_area
+            for shape_rect, shape_area in shape_obstacles
+        )
         cost += DRIFT_WEIGHT * (abs(box_x - want_x) + abs(box_y - want_y))
         if best_cost is None or cost < best_cost:
             best_cost = cost
@@ -172,7 +181,7 @@ def _best_label_rect(candidates, box_w, box_h, img_w, img_h, avoid):
     return best_rect
 
 
-def draw_annotations(image, annotations):
+def draw_annotations(image, annotations, draw_labels=True):
     output = image.copy()
     overlay = output.copy()
     img_h, img_w = output.shape[:2]
@@ -223,68 +232,72 @@ def draw_annotations(image, annotations):
         else:
             raise ValueError(f"Unknown shape_type: {shape_type!r}")
 
-    shape_bboxes = [
-        _shape_bbox(ann["points"], ann["shape_type"]) for ann in annotations
-    ]
-    shape_anchors = [
-        _shape_anchors(ann["points"], ann["shape_type"]) for ann in annotations
-    ]
-
-    image_area = img_w * img_h
-    avoidable_shapes = [
-        (index, b)
-        for index, b in enumerate(shape_bboxes)
-        if (b[2] - b[0]) * (b[3] - b[1]) <= LARGE_SHAPE_AREA_FRACTION * image_area
-    ]
-
-    # Labels are placed in a second pass, ordered top-to-bottom, so each new
-    # label can be pushed clear of every label already placed above it —
-    # this is what prevents nearby annotations' labels from stacking on top
-    # of each other on densely-annotated images.
-    order = sorted(range(len(annotations)), key=lambda i: shape_bboxes[i][1])
-    placed = []
-    pad_x = max(2, round(font_scale * 3))
-    pad_y = max(1, round(font_scale * 2))
-    gap = max(2, round(thickness * 1.5))
-
-    for i in order:
-        ann = annotations[i]
-        color = colors[i]
-        label = ann["label"]
-        anchors = shape_anchors[i]
-        centroid = _centroid(anchors)
-        # A shape is an obstacle for other shapes' labels, never for its own:
-        # its bbox is mostly empty canvas for a thin diagonal polygon, and
-        # forbidding that whole rectangle is what previously pushed the label
-        # far away from the outline it names.
-        avoid = [(rect, LABEL_CLASH_WEIGHT) for rect in placed]
-        avoid += [
-            (b, SHAPE_CLASH_WEIGHT) for index, b in avoidable_shapes if index != i
+    if draw_labels:
+        shape_bboxes = [
+            _shape_bbox(ann["points"], ann["shape_type"]) for ann in annotations
+        ]
+        shape_anchors = [
+            _shape_anchors(ann["points"], ann["shape_type"]) for ann in annotations
         ]
 
-        (text_w, text_h), baseline = cv2.getTextSize(label, FONT, font_scale, text_thickness)
-        box_w = text_w + 2 * pad_x
-        box_h = text_h + baseline + 2 * pad_y
-        candidates = _label_candidates(anchors, centroid, box_w, box_h, gap)
-        rect = _best_label_rect(candidates, box_w, box_h, img_w, img_h, avoid)
+        image_area = img_w * img_h
+        # Each shape's own area, alongside its bbox, computed once (not per
+        # candidate) and clamped to a 1.0 minimum so a degenerate shape
+        # (a polygon collapsed to a line, zero width or height) can't divide
+        # by zero when its coverage fraction is costed below.
+        avoidable_shapes = [
+            (index, b, max(1.0, (b[2] - b[0]) * (b[3] - b[1])))
+            for index, b in enumerate(shape_bboxes)
+            if (b[2] - b[0]) * (b[3] - b[1]) <= LARGE_SHAPE_AREA_FRACTION * image_area
+        ]
 
-        placed.append(tuple(rect))
+        # Labels are placed in a second pass, ordered top-to-bottom, so each new
+        # label can be pushed clear of every label already placed above it —
+        # this is what prevents nearby annotations' labels from stacking on top
+        # of each other on densely-annotated images.
+        order = sorted(range(len(annotations)), key=lambda i: shape_bboxes[i][1])
+        placed = []
+        pad_x = max(2, round(font_scale * 3))
+        pad_y = max(1, round(font_scale * 2))
+        gap = max(2, round(thickness * 1.5))
 
-        # A filled chip in the shape's own colour with auto-contrast text:
-        # the label has to stay readable over an arbitrary photo, and a
-        # text-only halo turns to mush at small sizes because the outline
-        # stroke eats into the glyph. The chip also ties the label to its
-        # shape by colour, which matters once two labels sit side by side.
-        cv2.rectangle(output, (rect[0], rect[1]), (rect[2], rect[3]), color, -1)
-        cv2.putText(
-            output,
-            label,
-            (rect[0] + pad_x, rect[3] - pad_y - baseline),
-            FONT,
-            font_scale,
-            _text_color_for(color),
-            text_thickness,
-            cv2.LINE_AA,
-        )
+        for i in order:
+            ann = annotations[i]
+            color = colors[i]
+            label = ann["label"]
+            anchors = shape_anchors[i]
+            centroid = _centroid(anchors)
+            # A shape is an obstacle for other shapes' labels, never for its own:
+            # its bbox is mostly empty canvas for a thin diagonal polygon, and
+            # forbidding that whole rectangle is what previously pushed the label
+            # far away from the outline it names.
+            shape_obstacles = [
+                (b, area) for index, b, area in avoidable_shapes if index != i
+            ]
+
+            (text_w, text_h), baseline = cv2.getTextSize(label, FONT, font_scale, text_thickness)
+            box_w = text_w + 2 * pad_x
+            box_h = text_h + baseline + 2 * pad_y
+            candidates = _label_candidates(anchors, centroid, box_w, box_h, gap)
+            rect = _best_label_rect(candidates, box_w, box_h, img_w, img_h, placed, shape_obstacles)
+
+            placed.append(tuple(rect))
+
+            # A filled chip in the shape's own colour with auto-contrast text:
+            # the label has to stay readable over an arbitrary photo, and a
+            # text-only halo turns to mush at small sizes because the outline
+            # stroke eats into the glyph. The chip also ties the label to its
+            # shape by colour, which matters once two labels sit side by side.
+            cv2.rectangle(output, (rect[0], rect[1]), (rect[2], rect[3]), color, -1)
+            cv2.putText(
+                output,
+                label,
+                (rect[0] + pad_x, rect[3] - pad_y - baseline),
+                FONT,
+                font_scale,
+                _text_color_for(color),
+                text_thickness,
+                cv2.LINE_AA,
+            )
 
     return output

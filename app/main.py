@@ -41,6 +41,7 @@ async def plot(
     annotation: UploadFile = File(...),
     format: str = Form(...),
     classes: UploadFile = File(None),
+    show_labels: bool = Form(True),
 ):
     parser = PARSERS.get(format)
     if parser is None:
@@ -86,7 +87,7 @@ async def plot(
     except ParseError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    plotted = draw_annotations(decoded_image, result.annotations)
+    plotted = draw_annotations(decoded_image, result.annotations, draw_labels=show_labels)
 
     success, encoded = cv2.imencode(".png", plotted)
     if not success:
